@@ -1,6 +1,7 @@
 """Textual TUI for TaskManager."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -140,7 +141,7 @@ class TaskManagerApp(App):
     async def on_mount(self) -> None:
         self.title = f"TaskManager {__version__}"
         self.apply_theme(self.active_theme)
-        self.check_service()
+        await self.check_service()
         await self.action_refresh()
         self.set_interval(10, self.action_refresh)
 
@@ -179,9 +180,9 @@ class TaskManagerApp(App):
         self.populate_table()
         self.notify("AI mode: ON" if ai_mode else "AI mode: OFF")
 
-    def check_service(self) -> None:
+    async def check_service(self) -> None:
         try:
-            r = httpx.get(f"{_api_base()}/healthz", timeout=2.0)
+            r = await asyncio.to_thread(httpx.get, f"{_api_base()}/healthz", timeout=2.0)
             self.service_up = r.status_code == 200
         except Exception:
             self.service_up = False
@@ -203,13 +204,36 @@ class TaskManagerApp(App):
         self.active_theme = name
 
     def populate_table(self) -> None:
+        """Diff-based, idempotent table rebuild.
+
+        Never clear()+re-add: Textual 8.2.8's clear() leaves stale row/column
+        keys, and on_mount can trigger two populates before the first finishes
+        (DuplicateKey). Instead: remove rows that no longer exist, keep rows
+        that do, add only new ones. Safe to call any number of times, even
+        concurrently.
+        """
         table = self.query_one(TaskTable)
-        table.clear(columns=True)
-        if self.ai_mode:
-            table.add_columns("ID", "Title", "Status", "Priority", "Project", "Agent", "Metadata")
-        else:
-            table.add_columns("Title", "Status", "Priority", "Project", "Due")
+        new_ids = {str(t["id"]) for t in self.tasks}
+
+        # remove rows no longer present (deleted tasks / filter changes)
+        for key in list(table.rows):
+            if getattr(key, "value", None) not in new_ids:
+                table.remove_row(key)
+
+        # (re)create columns only when the mode's column set changed
+        expected = 7 if self.ai_mode else 5
+        if len(table.columns) != expected:
+            for col in list(table.columns):
+                table.remove_column(getattr(col, "key", col))
+            if self.ai_mode:
+                table.add_columns("ID", "Title", "Status", "Priority", "Project", "Agent", "Metadata")
+            else:
+                table.add_columns("Title", "Status", "Priority", "Project", "Due")
+
         for t in self.tasks:
+            key = str(t["id"])
+            if key in table.rows:  # already rendered — leave untouched
+                continue
             if self.ai_mode:
                 metadata = json.dumps(t.get("metadata", {}))
                 table.add_row(
@@ -220,7 +244,7 @@ class TaskManagerApp(App):
                     t.get("project") or "",
                     t.get("owner_agent_id") or "",
                     metadata[:60] + "..." if len(metadata) > 60 else metadata,
-                    key=str(t["id"]),
+                    key=key,
                 )
             else:
                 due = t.get("due") or ""
@@ -235,12 +259,12 @@ class TaskManagerApp(App):
                     t["priority"],
                     t.get("project") or "",
                     due,
-                    key=str(t["id"]),
+                    key=key,
                 )
 
     async def action_refresh(self) -> None:
         try:
-            r = httpx.get(f"{_api_base()}/tasks", timeout=5.0)
+            r = await asyncio.to_thread(httpx.get, f"{_api_base()}/tasks", timeout=5.0)
             r.raise_for_status()
             data = r.json()
             self.tasks = data.get("tasks", [])
@@ -327,7 +351,8 @@ class CreateTaskScreen(Screen):
             self.app.notify("Title required", severity="error")
             return
         try:
-            r = httpx.post(
+            r = await asyncio.to_thread(
+                httpx.post,
                 f"{_api_base()}/tasks",
                 json={"title": title, "project": project, "priority": priority},
                 timeout=5.0,
