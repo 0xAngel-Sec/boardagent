@@ -61,6 +61,7 @@ Use the MCP server with any MCP host:
 ```bash
 python -m pytest
 python scripts/generate_agent_docs.py   # needs boardagent-server running
+python scripts/build_exes.py            # build the Windows exes into dist/
 ```
 
 ## License
