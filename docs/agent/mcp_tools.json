@@ -1,0 +1,246 @@
+[
+  {
+    "name": "taskmanager_create_task",
+    "title": null,
+    "description": "Create a new task. Priority is a color: red/orange/yellow/green/blue/white.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Task title"
+        },
+        "description": {
+          "type": "string"
+        },
+        "due": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "blue",
+            "white"
+          ],
+          "default": "white"
+        },
+        "project": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "todo",
+            "in_progress",
+            "blocked",
+            "done"
+          ],
+          "default": "todo"
+        },
+        "agent_id": {
+          "type": "string",
+          "description": "Agent namespace for metadata"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Freeform JSON metadata"
+        }
+      },
+      "required": [
+        "title"
+      ]
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  },
+  {
+    "name": "taskmanager_list_tasks",
+    "title": null,
+    "description": "List tasks, optionally filtered.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "todo",
+            "in_progress",
+            "blocked",
+            "done"
+          ]
+        },
+        "project": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        }
+      }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  },
+  {
+    "name": "taskmanager_get_task",
+    "title": null,
+    "description": "Read a single task by id.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  },
+  {
+    "name": "taskmanager_update_task",
+    "title": null,
+    "description": "Update a task. Metadata is merged into agent_id's namespace.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "due": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "blue",
+            "white"
+          ]
+        },
+        "project": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "todo",
+            "in_progress",
+            "blocked",
+            "done"
+          ]
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  },
+  {
+    "name": "taskmanager_delete_task",
+    "title": null,
+    "description": "Delete a task by id.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  },
+  {
+    "name": "taskmanager_claim_task",
+    "title": null,
+    "description": "Claim/lock a todo task for an agent. Returns an error if unavailable.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "agent_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "agent_id"
+      ]
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  },
+  {
+    "name": "taskmanager_complete_task",
+    "title": null,
+    "description": "Mark a task done. Only the owning agent may complete it.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "agent_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "agent_id"
+      ]
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
+  }
+]

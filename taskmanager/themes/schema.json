@@ -1,0 +1,97 @@
+[
+  {
+    "name": "background",
+    "type": "color",
+    "description": "Main background color"
+  },
+  {
+    "name": "foreground",
+    "type": "color",
+    "description": "Primary text color"
+  },
+  {
+    "name": "primary",
+    "type": "color",
+    "description": "Active elements / focus"
+  },
+  {
+    "name": "secondary",
+    "type": "color",
+    "description": "Less important elements"
+  },
+  {
+    "name": "accent",
+    "type": "color",
+    "description": "Highlights / selected items"
+  },
+  {
+    "name": "border",
+    "type": "color",
+    "description": "Panel and table borders"
+  },
+  {
+    "name": "muted",
+    "type": "color",
+    "description": "Dimmed text / disabled"
+  },
+  {
+    "name": "error",
+    "type": "color",
+    "description": "Errors and blocked status"
+  },
+  {
+    "name": "success",
+    "type": "color",
+    "description": "Success and done status"
+  },
+  {
+    "name": "status-todo",
+    "type": "color",
+    "description": "Status badge: todo"
+  },
+  {
+    "name": "status-in_progress",
+    "type": "color",
+    "description": "Status badge: in_progress"
+  },
+  {
+    "name": "status-blocked",
+    "type": "color",
+    "description": "Status badge: blocked"
+  },
+  {
+    "name": "status-done",
+    "type": "color",
+    "description": "Status badge: done"
+  },
+  {
+    "name": "priority-red",
+    "type": "color",
+    "description": "Priority: red"
+  },
+  {
+    "name": "priority-orange",
+    "type": "color",
+    "description": "Priority: orange"
+  },
+  {
+    "name": "priority-yellow",
+    "type": "color",
+    "description": "Priority: yellow"
+  },
+  {
+    "name": "priority-green",
+    "type": "color",
+    "description": "Priority: green"
+  },
+  {
+    "name": "priority-blue",
+    "type": "color",
+    "description": "Priority: blue"
+  },
+  {
+    "name": "priority-white",
+    "type": "color",
+    "description": "Priority: white"
+  }
+]

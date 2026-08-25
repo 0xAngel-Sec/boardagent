@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# TaskManager runtime data (local user state, never commit)
+~/.taskmanager/
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+Thumbs.db
+.DS_Store
