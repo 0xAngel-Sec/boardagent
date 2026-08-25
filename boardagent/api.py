@@ -25,14 +25,14 @@ from .service import (
     AlreadyClaimedError,
     InvalidTransitionError,
     NotOwnerError,
-    TaskManagerError,
+    BoardAgentError,
     TaskService,
 )
 
 
 def create_app(service: TaskService | None = None) -> FastAPI:
     app = FastAPI(
-        title="TaskManager API",
+        title="BoardAgent API",
         description="Agent-first local task manager REST API.",
         version=__version__,
     )
@@ -66,7 +66,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
     async def update_task(task_id: int, update: TaskUpdate) -> dict[str, Any]:
         try:
             task = svc.update_task(task_id, update)
-        except TaskManagerError as exc:
+        except BoardAgentError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if task is None:
             raise HTTPException(status_code=404, detail="task not found")
@@ -84,7 +84,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
             return _serialize(svc.claim_task(task_id, claim))
         except AlreadyClaimedError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except TaskManagerError as exc:
+        except BoardAgentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/tasks/{task_id}/complete", response_model=Task)
@@ -98,7 +98,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except InvalidTransitionError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except TaskManagerError as exc:
+        except BoardAgentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/tasks/schema/priority")
@@ -130,8 +130,8 @@ app = create_app()
 def main() -> None:
     import uvicorn
 
-    host = os.environ.get("TASKMANAGER_HOST", DEFAULT_HOST)
-    port = int(os.environ.get("TASKMANAGER_PORT", DEFAULT_PORT))
+    host = os.environ.get("BOARDAGENT_HOST", DEFAULT_HOST)
+    port = int(os.environ.get("BOARDAGENT_PORT", DEFAULT_PORT))
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 

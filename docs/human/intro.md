@@ -1,6 +1,6 @@
-# Why TaskManager?
+# Why BoardAgent?
 
-TaskManager is a Todoist-style task manager built for AI agents first. Humans get a fast terminal UI, but the real users are agents: they can create tasks, attach arbitrary metadata, claim work, and complete it through a clean REST API or MCP server.
+BoardAgent is a Todoist-style task manager built for AI agents first. Humans get a fast terminal UI, but the real users are agents: they can create tasks, attach arbitrary metadata, claim work, and complete it through a clean REST API or MCP server.
 
 It is local-first, free forever, and owns your data in a single SQLite file.
 
@@ -14,8 +14,8 @@ It is local-first, free forever, and owns your data in a single SQLite file.
 
 ## Quick walkthrough
 
-1. Start the server: `taskmanager-server`
-2. Open the TUI: `taskmanager`
+1. Start the server: `boardagent-server`
+2. Open the TUI: `boardagent`
 3. Press `c` to create a task, `a` to toggle AI mode, `r` to refresh, `q` to quit.
 4. Use the Settings tab to switch between `amber` and `matrix` themes or adjust opacity.
 

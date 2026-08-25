@@ -1,4 +1,4 @@
-"""Tests for TaskManager service and API layers."""
+"""Tests for BoardAgent service and API layers."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -6,14 +6,14 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from taskmanager.api import create_app
-from taskmanager.models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskUpdate
-from taskmanager.service import (
+from boardagent.api import create_app
+from boardagent.models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskUpdate
+from boardagent.service import (
     AlreadyClaimedError,
     NotOwnerError,
     TaskService,
 )
-from taskmanager.store import TaskStore
+from boardagent.store import TaskStore
 
 
 @pytest.fixture

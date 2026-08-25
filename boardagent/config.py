@@ -1,4 +1,4 @@
-"""TaskManager configuration."""
+"""BoardAgent configuration."""
 from __future__ import annotations
 
 import os
@@ -6,8 +6,8 @@ from pathlib import Path
 
 DEFAULT_PORT = 7373
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_DB_NAME = "taskmanager.db"
-APP_NAME = "TaskManager"
+DEFAULT_DB_NAME = "boardagent.db"
+APP_NAME = "BoardAgent"
 
 
 def _home() -> Path:
@@ -15,12 +15,16 @@ def _home() -> Path:
 
 
 def data_dir() -> Path:
-    d = _home() / ".taskmanager"
+    d = _home() / ".boardagent"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def db_path() -> Path:
+    # BOARDAGENT_DB overrides the DB location (used by tests to isolate).
+    override = os.environ.get("BOARDAGENT_DB")
+    if override:
+        return Path(override)
     return data_dir() / DEFAULT_DB_NAME
 
 
@@ -35,6 +39,6 @@ def settings_path() -> Path:
 
 
 def server_url() -> str:
-    host = os.environ.get("TASKMANAGER_HOST", DEFAULT_HOST)
-    port = int(os.environ.get("TASKMANAGER_PORT", DEFAULT_PORT))
+    host = os.environ.get("BOARDAGENT_HOST", DEFAULT_HOST)
+    port = int(os.environ.get("BOARDAGENT_PORT", DEFAULT_PORT))
     return f"http://{host}:{port}"

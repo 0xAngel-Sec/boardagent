@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "taskmanager"
+name = "boardagent"
 version = "0.1.0"
 description = "Local-first, agent-first task manager"
 readme = "README.md"
 license = {text = "MIT"}
-authors = [{name = "TaskManager contributors"}]
+authors = [{name = "BoardAgent contributors"}]
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.133.1",
@@ -27,16 +27,16 @@ dev = [
 ]
 
 [project.scripts]
-taskmanager-server = "taskmanager.api:main"
-taskmanager = "taskmanager.tui:main"
-taskmanager-mcp = "taskmanager.mcp_server:main"
+boardagent-server = "boardagent.api:main"
+boardagent = "boardagent.tui:main"
+boardagent-mcp = "boardagent.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["taskmanager*"]
+include = ["boardagent*"]
 
 [tool.setuptools.package-data]
-taskmanager = ["themes/*.json", "themes/schema.json"]
+boardagent = ["themes/*.json", "themes/schema.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

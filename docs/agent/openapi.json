@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "TaskManager API",
+    "title": "BoardAgent API",
     "description": "Agent-first local task manager REST API.",
     "version": "0.1.0"
   },

@@ -1,4 +1,4 @@
-# TaskManager REST API (agent docs)
+# BoardAgent REST API (agent docs)
 
 Base URL: `http://127.0.0.1:7373`
 

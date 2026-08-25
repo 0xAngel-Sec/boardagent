@@ -3,12 +3,12 @@ import sys
 import time
 
 # Headless TUI smoke: launch, wait for first paint, save screenshot, quit.
-from taskmanager.tui import TaskManagerApp
+from boardagent.tui import BoardAgentApp
 
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "docs/human/screenshots/tui_main.png"
-    app = TaskManagerApp()
+    app = BoardAgentApp()
     # Run in headless mode with screenshot capture
     os.makedirs(os.path.dirname(out), exist_ok=True)
     app.run(

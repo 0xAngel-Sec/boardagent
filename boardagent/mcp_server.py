@@ -19,7 +19,7 @@ from .service import (
     AlreadyClaimedError,
     InvalidTransitionError,
     NotOwnerError,
-    TaskManagerError,
+    BoardAgentError,
     TaskService,
 )
 
@@ -40,7 +40,7 @@ def _tool(name: str, description: str, schema: dict[str, Any]) -> types.Tool:
 
 TOOLS = [
     _tool(
-        "taskmanager_create_task",
+        "boardagent_create_task",
         "Create a new task. Priority is a color: red/orange/yellow/green/blue/white.",
         {
             "type": "object",
@@ -66,7 +66,7 @@ TOOLS = [
         },
     ),
     _tool(
-        "taskmanager_list_tasks",
+        "boardagent_list_tasks",
         "List tasks, optionally filtered.",
         {
             "type": "object",
@@ -78,7 +78,7 @@ TOOLS = [
         },
     ),
     _tool(
-        "taskmanager_get_task",
+        "boardagent_get_task",
         "Read a single task by id.",
         {
             "type": "object",
@@ -87,7 +87,7 @@ TOOLS = [
         },
     ),
     _tool(
-        "taskmanager_update_task",
+        "boardagent_update_task",
         "Update a task. Metadata is merged into agent_id's namespace.",
         {
             "type": "object",
@@ -106,7 +106,7 @@ TOOLS = [
         },
     ),
     _tool(
-        "taskmanager_delete_task",
+        "boardagent_delete_task",
         "Delete a task by id.",
         {
             "type": "object",
@@ -115,7 +115,7 @@ TOOLS = [
         },
     ),
     _tool(
-        "taskmanager_claim_task",
+        "boardagent_claim_task",
         "Claim/lock a todo task for an agent. Returns an error if unavailable.",
         {
             "type": "object",
@@ -127,7 +127,7 @@ TOOLS = [
         },
     ),
     _tool(
-        "taskmanager_complete_task",
+        "boardagent_complete_task",
         "Mark a task done. Only the owning agent may complete it.",
         {
             "type": "object",
@@ -151,7 +151,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
         name = params.name
         args = params.arguments or {}
         try:
-            if name == "taskmanager_create_task":
+            if name == "boardagent_create_task":
                 create = TaskCreate(
                     title=args["title"],
                     description=args.get("description"),
@@ -164,7 +164,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 )
                 text = _to_json(svc.create_task(create))
 
-            elif name == "taskmanager_list_tasks":
+            elif name == "boardagent_list_tasks":
                 status = Status(args["status"]) if "status" in args else None
                 tasks = svc.list_tasks(
                     status=status,
@@ -173,11 +173,11 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 )
                 text = _to_json({"tasks": tasks, "count": len(tasks)})
 
-            elif name == "taskmanager_get_task":
+            elif name == "boardagent_get_task":
                 task = svc.get_task(args["id"])
                 text = _to_json(task if task else {"error": "task not found"})
 
-            elif name == "taskmanager_update_task":
+            elif name == "boardagent_update_task":
                 update = TaskUpdate(
                     title=args.get("title"),
                     description=args.get("description"),
@@ -191,14 +191,14 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 result = svc.update_task(args["id"], update)
                 text = _to_json(result if result else {"error": "task not found"})
 
-            elif name == "taskmanager_delete_task":
+            elif name == "boardagent_delete_task":
                 text = json.dumps({"deleted": svc.delete_task(args["id"])})
 
-            elif name == "taskmanager_claim_task":
+            elif name == "boardagent_claim_task":
                 result = svc.claim_task(args["id"], TaskClaim(agent_id=args["agent_id"]))
                 text = _to_json(result)
 
-            elif name == "taskmanager_complete_task":
+            elif name == "boardagent_complete_task":
                 result = svc.complete_task(
                     args["id"], TaskComplete(agent_id=args["agent_id"])
                 )
@@ -213,7 +213,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
             text = json.dumps({"error": str(exc), "code": "not_owner"})
         except InvalidTransitionError as exc:
             text = json.dumps({"error": str(exc), "code": "invalid_transition"})
-        except TaskManagerError as exc:
+        except BoardAgentError as exc:
             text = json.dumps({"error": str(exc)})
         except Exception as exc:  # noqa: BLE001
             text = json.dumps({"error": f"internal error: {exc}"})
@@ -221,7 +221,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
         return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
 
     return Server(
-        "taskmanager",
+        "boardagent",
         on_list_tools=on_list_tools,
         on_call_tool=on_call_tool,
     )

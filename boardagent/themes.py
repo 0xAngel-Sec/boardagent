@@ -1,4 +1,4 @@
-"""Default built-in TUI themes for TaskManager."""
+"""Default built-in TUI themes for BoardAgent."""
 from __future__ import annotations
 
 import json

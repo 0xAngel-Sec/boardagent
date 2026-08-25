@@ -1,4 +1,4 @@
-"""Textual TUI for TaskManager."""
+"""Textual TUI for BoardAgent."""
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +34,7 @@ from .themes import BUILTIN_THEMES, get_builtin_theme, write_builtin_themes
 
 
 class ThemeManager:
-    """Loads built-in and user themes from ~/.taskmanager/themes."""
+    """Loads built-in and user themes from ~/.boardagent/themes."""
 
     def __init__(self):
         write_builtin_themes(themes_dir())
@@ -76,8 +76,8 @@ def _save_settings(settings: dict[str, Any]) -> None:
 
 
 def _api_base() -> str:
-    host = os.environ.get("TASKMANAGER_HOST", DEFAULT_HOST)
-    port = int(os.environ.get("TASKMANAGER_PORT", DEFAULT_PORT))
+    host = os.environ.get("BOARDAGENT_HOST", DEFAULT_HOST)
+    port = int(os.environ.get("BOARDAGENT_PORT", DEFAULT_PORT))
     return f"http://{host}:{port}"
 
 
@@ -88,9 +88,9 @@ class ServiceUnavailable(Static):
         yield Static(
             "[b]SERVICE NOT RUNNING[/b]\n\n"
             "Start it with:\n\n"
-            "[b]taskmanager-server[/b]\n\n"
+            "[b]boardagent-server[/b]\n\n"
             "or:\n\n"
-            "[b]python -m taskmanager.api[/b]",
+            "[b]python -m boardagent.api[/b]",
             classes="error-message",
         )
 
@@ -104,7 +104,7 @@ class TaskTable(DataTable):
         self.zebra_stripes = True
 
 
-class TaskManagerApp(App):
+class BoardAgentApp(App):
     """Main Textual app."""
 
     CSS = """
@@ -139,7 +139,7 @@ class TaskManagerApp(App):
         self.active_theme = self.settings.get("theme", "amber")
 
     async def on_mount(self) -> None:
-        self.title = f"TaskManager {__version__}"
+        self.title = f"BoardAgent {__version__}"
         self.apply_theme(self.active_theme)
         await self.check_service()
         await self.action_refresh()
@@ -187,7 +187,7 @@ class TaskManagerApp(App):
         except Exception:
             self.service_up = False
         if not self.service_up:
-            self.notify("Service not running. Start taskmanager-server.", severity="error", timeout=10)
+            self.notify("Service not running. Start boardagent-server.", severity="error", timeout=10)
 
     def apply_theme(self, name: str) -> None:
         theme = THEME.get(name)
@@ -366,7 +366,7 @@ class CreateTaskScreen(Screen):
 
 
 def main() -> None:
-    app = TaskManagerApp()
+    app = BoardAgentApp()
     app.run()
 
 

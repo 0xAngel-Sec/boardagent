@@ -21,12 +21,13 @@ ROOT = Path(__file__).resolve().parents[1]
     sys.platform == "win32" and sys.version_info < (3, 9),
     reason="stdio MCP smoke test skipped on old Windows",
 )
-async def test_mcp_smoke_create_and_get():
+async def test_mcp_smoke_create_and_get(tmp_path):
+    test_db = tmp_path / "mcp_test.db"
     server_params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "taskmanager.mcp_server"],
+        args=["-m", "boardagent.mcp_server"],
         cwd=str(ROOT),
-        env={"PYTHONUNBUFFERED": "1"},
+        env={"PYTHONUNBUFFERED": "1", "BOARDAGENT_DB": str(test_db)},
     )
     async with stdio_client(server_params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
@@ -34,12 +35,12 @@ async def test_mcp_smoke_create_and_get():
 
             tools = await session.list_tools()
             tool_names = {t.name for t in tools.tools}
-            assert "taskmanager_create_task" in tool_names
-            assert "taskmanager_claim_task" in tool_names
-            assert "taskmanager_complete_task" in tool_names
+            assert "boardagent_create_task" in tool_names
+            assert "boardagent_claim_task" in tool_names
+            assert "boardagent_complete_task" in tool_names
 
             result = await session.call_tool(
-                "taskmanager_create_task",
+                "boardagent_create_task",
                 arguments={
                     "title": "MCP smoke task",
                     "priority": "green",
@@ -56,13 +57,13 @@ async def test_mcp_smoke_create_and_get():
             task_id = task["id"]
 
             result = await session.call_tool(
-                "taskmanager_get_task", arguments={"id": task_id}
+                "boardagent_get_task", arguments={"id": task_id}
             )
             got = json.loads(result.content[0].text)
             assert got["id"] == task_id
 
             result = await session.call_tool(
-                "taskmanager_claim_task",
+                "boardagent_claim_task",
                 arguments={"id": task_id, "agent_id": "smoke_agent"},
             )
             claim = json.loads(result.content[0].text)
@@ -70,13 +71,13 @@ async def test_mcp_smoke_create_and_get():
 
             # Second claim should fail
             result = await session.call_tool(
-                "taskmanager_claim_task",
+                "boardagent_claim_task",
                 arguments={"id": task_id, "agent_id": "other"},
             )
             assert "error" in result.content[0].text.lower()
 
             result = await session.call_tool(
-                "taskmanager_complete_task",
+                "boardagent_complete_task",
                 arguments={"id": task_id, "agent_id": "smoke_agent"},
             )
             complete = json.loads(result.content[0].text)

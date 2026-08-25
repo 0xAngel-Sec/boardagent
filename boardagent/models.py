@@ -1,4 +1,4 @@
-"""Pydantic models for TaskManager."""
+"""Pydantic models for BoardAgent."""
 from __future__ import annotations
 
 from datetime import datetime

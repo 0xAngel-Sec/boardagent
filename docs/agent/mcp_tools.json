@@ -1,6 +1,6 @@
 [
   {
-    "name": "taskmanager_create_task",
+    "name": "boardagent_create_task",
     "title": null,
     "description": "Create a new task. Priority is a color: red/orange/yellow/green/blue/white.",
     "input_schema": {
@@ -62,7 +62,7 @@
     "meta": null
   },
   {
-    "name": "taskmanager_list_tasks",
+    "name": "boardagent_list_tasks",
     "title": null,
     "description": "List tasks, optionally filtered.",
     "input_schema": {
@@ -92,7 +92,7 @@
     "meta": null
   },
   {
-    "name": "taskmanager_get_task",
+    "name": "boardagent_get_task",
     "title": null,
     "description": "Read a single task by id.",
     "input_schema": {
@@ -113,7 +113,7 @@
     "meta": null
   },
   {
-    "name": "taskmanager_update_task",
+    "name": "boardagent_update_task",
     "title": null,
     "description": "Update a task. Metadata is merged into agent_id's namespace.",
     "input_schema": {
@@ -173,7 +173,7 @@
     "meta": null
   },
   {
-    "name": "taskmanager_delete_task",
+    "name": "boardagent_delete_task",
     "title": null,
     "description": "Delete a task by id.",
     "input_schema": {
@@ -194,7 +194,7 @@
     "meta": null
   },
   {
-    "name": "taskmanager_claim_task",
+    "name": "boardagent_claim_task",
     "title": null,
     "description": "Claim/lock a todo task for an agent. Returns an error if unavailable.",
     "input_schema": {
@@ -219,7 +219,7 @@
     "meta": null
   },
   {
-    "name": "taskmanager_complete_task",
+    "name": "boardagent_complete_task",
     "title": null,
     "description": "Mark a task done. Only the owning agent may complete it.",
     "input_schema": {

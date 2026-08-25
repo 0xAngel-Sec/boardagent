@@ -1,12 +1,12 @@
-# TaskManager — Engineering Decisions
+# BoardAgent — Engineering Decisions
 
 This document records the open-question defaults chosen during the initial build.
 
 ## Architecture
 
-- **Single background process owns the DB.** The service layer, REST API, and MCP server all run inside one uvicorn process (`taskmanager-server`). The Textual UI is a separate foreground process that calls `http://127.0.0.1:7373`.
-- **MCP wraps the service layer, not HTTP.** Both REST and MCP import from `taskmanager.service` and `taskmanager.store`. No task logic is duplicated. MCP is implemented with the official `mcp` Python SDK (stdio transport), making it easy to plug into any MCP host.
-- **SQLite, single file, WAL enabled.** Storage is at `~/.taskmanager/taskmanager.db` by default. WAL is set with `PRAGMA journal_mode=WAL` for safer concurrent reads while the service runs.
+- **Single background process owns the DB.** The service layer, REST API, and MCP server all run inside one uvicorn process (`boardagent-server`). The Textual UI is a separate foreground process that calls `http://127.0.0.1:7373`.
+- **MCP wraps the service layer, not HTTP.** Both REST and MCP import from `boardagent.service` and `boardagent.store`. No task logic is duplicated. MCP is implemented with the official `mcp` Python SDK (stdio transport), making it easy to plug into any MCP host.
+- **SQLite, single file, WAL enabled.** Storage is at `~/.boardagent/boardagent.db` by default. WAL is set with `PRAGMA journal_mode=WAL` for safer concurrent reads while the service runs.
 
 ## Data Model
 
@@ -22,8 +22,8 @@ This document records the open-question defaults chosen during the initial build
 
 ## Terminal UI
 
-- **Textual, foreground, separate process.** Entry point `taskmanager`. Two display modes: Human (default) and AI (toggle with `a`). Settings tab controls opacity and theme switching.
-- **Theme format: JSON.** Themes live in `~/.taskmanager/themes/*.json` and in the built-in package `taskmanager/themes/`. Schema is documented in `docs/human/themes.md`. Each theme defines a named palette map (name → Textual CSS variables + metadata colors). Default themes: `amber.json` and `matrix.json`.
+- **Textual, foreground, separate process.** Entry point `boardagent`. Two display modes: Human (default) and AI (toggle with `a`). Settings tab controls opacity and theme switching.
+- **Theme format: JSON.** Themes live in `~/.boardagent/themes/*.json` and in the built-in package `boardagent/themes/`. Schema is documented in `docs/human/themes.md`. Each theme defines a named palette map (name → Textual CSS variables + metadata colors). Default themes: `amber.json` and `matrix.json`.
 - **Opacity via Windows layered window (when on Windows).** Textual apps run in a terminal; true per-pixel window transparency requires platform-specific APIs. We provide a documented Windows helper script that sets the console window opacity via the Win32 `SetLayeredWindowAttributes` API. The setting is persisted; applying it requires restarting the TUI after running the helper.
 
 ## Docs
@@ -33,7 +33,7 @@ This document records the open-question defaults chosen during the initial build
 
 ## Packaging
 
-- **pyproject.toml with console scripts:** `taskmanager-server`, `taskmanager`, `taskmanager-mcp`.
+- **pyproject.toml with console scripts:** `boardagent-server`, `boardagent`, `boardagent-mcp`.
 - **MIT license.** `LICENSE` included.
 - **PyInstaller exes are documented but not pre-built.** Build scripts are in `scripts/build_exe*.bat` and `docs/human/packaging.md`.
 

@@ -9,19 +9,19 @@ from .models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskU
 from .store import TaskStore
 
 
-class TaskManagerError(Exception):
+class BoardAgentError(Exception):
     pass
 
 
-class AlreadyClaimedError(TaskManagerError):
+class AlreadyClaimedError(BoardAgentError):
     pass
 
 
-class NotOwnerError(TaskManagerError):
+class NotOwnerError(BoardAgentError):
     pass
 
 
-class InvalidTransitionError(TaskManagerError):
+class InvalidTransitionError(BoardAgentError):
     pass
 
 
@@ -80,7 +80,7 @@ class TaskService:
                 **update.metadata,
             }
         elif update.metadata is not None and not update.agent_id:
-            raise TaskManagerError("metadata update requires agent_id")
+            raise BoardAgentError("metadata update requires agent_id")
 
         if update.status == Status.TODO:
             owner_agent_id = None  # releasing to todo clears the claim
@@ -109,7 +109,7 @@ class TaskService:
     def claim_task(self, task_id: int, claim: TaskClaim) -> dict[str, Any]:
         task = self.store.get_task(task_id)
         if task is None:
-            raise TaskManagerError("task not found")
+            raise BoardAgentError("task not found")
         if task["status"] != Status.TODO.value:
             raise AlreadyClaimedError("task is not available for claiming")
         if task.get("owner_agent_id") is not None:
@@ -132,7 +132,7 @@ class TaskService:
     def complete_task(self, task_id: int, complete: TaskComplete) -> dict[str, Any]:
         task = self.store.get_task(task_id)
         if task is None:
-            raise TaskManagerError("task not found")
+            raise BoardAgentError("task not found")
         if task.get("owner_agent_id") != complete.agent_id:
             raise NotOwnerError("only the owning agent can complete this task")
         if task["status"] == Status.DONE.value:

@@ -1,6 +1,6 @@
-# TaskManager Theme Format
+# BoardAgent Theme Format
 
-TaskManager themes are plain JSON files. Drop them in `~/.taskmanager/themes/` and they appear in the TUI Settings tab automatically.
+BoardAgent themes are plain JSON files. Drop them in `~/.boardagent/themes/` and they appear in the TUI Settings tab automatically.
 
 ## File layout
 
@@ -22,7 +22,7 @@ Only `name` and `colors` are required. `description` is optional.
 
 ## Color tokens
 
-See `taskmanager/themes/schema.json` for the full list. Important tokens:
+See `boardagent/themes/schema.json` for the full list. Important tokens:
 
 - `background`, `foreground`, `primary`, `secondary`, `accent`, `border`, `muted`
 - `error`, `success`

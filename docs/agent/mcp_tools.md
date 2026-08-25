@@ -1,10 +1,10 @@
-# TaskManager MCP Tools (agent docs)
+# BoardAgent MCP Tools (agent docs)
 
-Transport: stdio. Command: `taskmanager-mcp`
+Transport: stdio. Command: `boardagent-mcp`
 
 ## Tools
 
-### taskmanager_create_task
+### boardagent_create_task
 
 Create a new task. Priority is a color: red/orange/yellow/green/blue/white.
 
@@ -63,7 +63,7 @@ Create a new task. Priority is a color: red/orange/yellow/green/blue/white.
 }
 ```
 
-### taskmanager_list_tasks
+### boardagent_list_tasks
 
 List tasks, optionally filtered.
 
@@ -90,7 +90,7 @@ List tasks, optionally filtered.
 }
 ```
 
-### taskmanager_get_task
+### boardagent_get_task
 
 Read a single task by id.
 
@@ -108,7 +108,7 @@ Read a single task by id.
 }
 ```
 
-### taskmanager_update_task
+### boardagent_update_task
 
 Update a task. Metadata is merged into agent_id's namespace.
 
@@ -165,7 +165,7 @@ Update a task. Metadata is merged into agent_id's namespace.
 }
 ```
 
-### taskmanager_delete_task
+### boardagent_delete_task
 
 Delete a task by id.
 
@@ -183,7 +183,7 @@ Delete a task by id.
 }
 ```
 
-### taskmanager_claim_task
+### boardagent_claim_task
 
 Claim/lock a todo task for an agent. Returns an error if unavailable.
 
@@ -205,7 +205,7 @@ Claim/lock a todo task for an agent. Returns an error if unavailable.
 }
 ```
 
-### taskmanager_complete_task
+### boardagent_complete_task
 
 Mark a task done. Only the owning agent may complete it.
 

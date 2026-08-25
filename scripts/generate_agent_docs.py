@@ -24,7 +24,7 @@ def dump_openapi_docs(spec: dict) -> None:
     (AGENT_DOCS / "openapi.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
     (AGENT_DOCS / "openapi.yaml").write_text(yaml.safe_dump(spec, sort_keys=False), encoding="utf-8")
 
-    md = ["# TaskManager REST API (agent docs)\n\n"]
+    md = ["# BoardAgent REST API (agent docs)\n\n"]
     md.append(f"Base URL: `http://127.0.0.1:7373`\n\n")
     md.append("## Endpoints\n\n")
     paths = spec.get("paths", {})
@@ -43,14 +43,14 @@ def dump_openapi_docs(spec: dict) -> None:
 
 def dump_mcp_docs() -> None:
     # Import inside function so we do not need a running server.
-    from taskmanager.mcp_server import TOOLS
+    from boardagent.mcp_server import TOOLS
 
     AGENT_DOCS.mkdir(parents=True, exist_ok=True)
     (AGENT_DOCS / "mcp_tools.json").write_text(
         json.dumps([t.model_dump() for t in TOOLS], indent=2), encoding="utf-8"
     )
-    md = ["# TaskManager MCP Tools (agent docs)\n\n"]
-    md.append("Transport: stdio. Command: `taskmanager-mcp`\n\n")
+    md = ["# BoardAgent MCP Tools (agent docs)\n\n"]
+    md.append("Transport: stdio. Command: `boardagent-mcp`\n\n")
     md.append("## Tools\n\n")
     for tool in TOOLS:
         md.append(f"### {tool.name}\n\n")
@@ -60,13 +60,13 @@ def dump_mcp_docs() -> None:
 
 
 def main() -> None:
-    base_url = os.environ.get("TASKMANAGER_DOCS_URL", "http://127.0.0.1:7373")
+    base_url = os.environ.get("BOARDAGENT_DOCS_URL", "http://127.0.0.1:7373")
     try:
         spec = fetch_openapi(base_url)
         dump_openapi_docs(spec)
     except Exception as exc:
         print(f"Could not fetch OpenAPI from {base_url}: {exc}", file=sys.stderr)
-        print("Generate docs with the server running, or pass TASKMANAGER_DOCS_URL.", file=sys.stderr)
+        print("Generate docs with the server running, or pass BOARDAGENT_DOCS_URL.", file=sys.stderr)
         sys.exit(1)
     dump_mcp_docs()
     print(f"Agent docs written to {AGENT_DOCS}")

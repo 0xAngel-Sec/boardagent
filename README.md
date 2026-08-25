@@ -1,4 +1,4 @@
-# TaskManager
+# BoardAgent
 
 A local-first, agent-first task manager. Free forever, no cloud.
 
@@ -11,7 +11,7 @@ Built from SPEC.md by Kimi K2.7.
 ## Install
 
 ```bash
-cd taskmanager
+cd boardagent
 pip install -e .
 ```
 
@@ -22,13 +22,13 @@ Dependencies: FastAPI, uvicorn, pydantic, textual, httpx, mcp.
 Start the background service:
 
 ```bash
-taskmanager-server
+boardagent-server
 ```
 
 Open the TUI in another terminal:
 
 ```bash
-taskmanager
+boardagent
 ```
 
 Use the MCP server with any MCP host:
@@ -36,8 +36,8 @@ Use the MCP server with any MCP host:
 ```json
 {
   "mcpServers": {
-    "taskmanager": {
-      "command": "taskmanager-mcp"
+    "boardagent": {
+      "command": "boardagent-mcp"
     }
   }
 }
@@ -46,9 +46,9 @@ Use the MCP server with any MCP host:
 ## Defaults
 
 - API base URL: `http://127.0.0.1:7373`
-- DB: `~/.taskmanager/taskmanager.db` (SQLite, WAL enabled)
-- Themes: `~/.taskmanager/themes/` (plus built-ins `amber` and `matrix`)
-- Settings: `~/.taskmanager/settings.json`
+- DB: `~/.boardagent/boardagent.db` (SQLite, WAL enabled)
+- Themes: `~/.boardagent/themes/` (plus built-ins `amber` and `matrix`)
+- Settings: `~/.boardagent/settings.json`
 
 ## Docs
 
@@ -60,7 +60,7 @@ Use the MCP server with any MCP host:
 
 ```bash
 python -m pytest
-python scripts/generate_agent_docs.py   # needs taskmanager-server running
+python scripts/generate_agent_docs.py   # needs boardagent-server running
 ```
 
 ## License

@@ -9,8 +9,8 @@ dist/
 .venv/
 venv/
 
-# TaskManager runtime data (local user state, never commit)
-~/.taskmanager/
+# BoardAgent runtime data (local user state, never commit)
+~/.boardagent/
 *.db
 *.db-wal
 *.db-shm
