@@ -175,8 +175,8 @@ class ServiceUnavailable(Screen):
 class TaskTable(DataTable):
     """Task list table."""
 
-    def __init__(self, ai_mode: bool = False) -> None:
-        super().__init__(show_cursor=True, cursor_type="row")
+    def __init__(self, ai_mode: bool = False, **kwargs) -> None:
+        super().__init__(show_cursor=True, cursor_type="row", **kwargs)
         self.ai_mode = ai_mode
         self.zebra_stripes = True
 
@@ -236,9 +236,22 @@ class BoardAgentApp(App):
     .settings-section { text-style: bold; color: $primary; margin-top: 1; }
     .kb-row { height: 3; }
     .kb-row > * { margin: 0 1; }
+    .kb-row Static { padding: 0 1; }
     .kb-row Static:hover { background: $boost; text-style: bold; }
+    .kb-row Static:focus { background: $primary; color: $background; text-style: bold; }
     Footer { background: $surface; }
     """
+
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("r", "refresh", "Refresh"),
+        ("a", "toggle_ai", "AI mode"),
+        ("c", "create", "Create"),
+        ("e", "edit", "Edit"),
+        ("d", "delete", "Delete"),
+        ("l", "claim", "Claim"),
+        ("t", "complete", "Complete"),
+    ]
 
     ai_mode = reactive(False)
     service_up = reactive(True)
@@ -249,13 +262,11 @@ class BoardAgentApp(App):
 
     def __init__(self) -> None:
         self.keybinds = load_keybinds()
-        # Build BINDINGS from the (possibly overridden) keybinds before the
-        # App base class reads them.
-        self.BINDINGS = [
-            (key, action, ACTION_LABELS.get(action, action))
-            for action, key in self.keybinds.items()
-        ]
         super().__init__()
+        # Rebuild the dispatch map from persisted keybinds so overrides apply
+        # at startup (Textual builds _bindings from class-level BINDINGS at
+        # mount; we replace it with the user's overrides).
+        self._rebuild_bindings()
         self.settings = _load_settings()
         # Plain instance attribute. NOTE: must NOT be named current_theme —
         # Textual 8's App base class defines current_theme as a read-only
@@ -263,6 +274,27 @@ class BoardAgentApp(App):
         self.active_theme = self.settings.get("theme", "amber")
         self.server_settings = load_server_settings()
         self.api_keys: list[dict[str, Any]] = []
+
+    def _rebuild_bindings(self) -> None:
+        """Rebuild the key dispatch map from self.keybinds.
+
+        Textual builds _bindings once at mount from the class-level BINDINGS;
+        refresh_bindings() only repaints the footer. Rebuilding the
+        BindingsMap makes overridden keys dispatch immediately.
+        """
+        from textual.binding import Binding, BindingsMap
+
+        new_map = BindingsMap()
+        for act, k in self.keybinds.items():
+            new_map._add_binding(
+                Binding(k, act, ACTION_LABELS.get(act, act), show=True)
+            )
+        # Preserve the command palette binding (added by App at init).
+        for key_, binding in self._bindings:
+            if binding.action in ("command_palette", "app.command_palette"):
+                new_map._add_binding(binding)
+        self._bindings = new_map
+        self.refresh_bindings()
 
     async def on_mount(self) -> None:
         self.title = f"BoardAgent {__version__}"
@@ -324,7 +356,10 @@ class BoardAgentApp(App):
                     # Read from plain settings here, NOT the ai_mode reactive:
                     # first access to a reactive fires its watcher, which would
                     # run populate_table() before TaskTable is mounted.
-                    yield TaskTable(ai_mode=bool(self.settings.get("ai_mode", False)))
+                    yield TaskTable(
+                        ai_mode=bool(self.settings.get("ai_mode", False)),
+                        id="task-list",
+                    )
                     yield Vertical(
                         Static("Select a task to view details", id="detail-content"),
                         Horizontal(
@@ -401,10 +436,12 @@ class BoardAgentApp(App):
     def _keybind_rows(self) -> list[Horizontal]:
         rows: list[Horizontal] = []
         for action, key in self.keybinds.items():
+            val = Static(key, id=f"kb-val-{action}", classes="kb-val")
+            val.can_focus = True
             rows.append(
                 Horizontal(
                     Label(f"{ACTION_LABELS.get(action, action)}", classes="settings-label"),
-                    Static(key, id=f"kb-val-{action}"),
+                    val,
                     Button("Change", id=f"kb-{action}"),
                     classes="kb-row",
                 )
@@ -618,23 +655,7 @@ class BoardAgentApp(App):
     def set_keybind(self, action: str, key: str) -> None:
         self.keybinds[action] = key
         save_keybinds(self.keybinds)
-        # Rebuild the ACTUAL dispatch map (self._bindings), not just the
-        # footer. Textual builds _bindings once at mount from the class-level
-        # BINDINGS; refresh_bindings() only repaints the footer. Rebuild the
-        # BindingsMap so the new key dispatches immediately.
-        from textual.binding import Binding, BindingsMap
-
-        new_map = BindingsMap()
-        for act, k in self.keybinds.items():
-            new_map._add_binding(
-                Binding(k, act, ACTION_LABELS.get(act, act), show=True)
-            )
-        # Preserve the command palette binding (added by App at init).
-        for key_, binding in self._bindings:
-            if binding.action in ("command_palette", "app.command_palette"):
-                new_map._add_binding(binding)
-        self._bindings = new_map
-        self.refresh_bindings()
+        self._rebuild_bindings()
         try:
             self.query_one(f"#kb-val-{action}", Static).update(key)
         except Exception:
@@ -642,6 +663,11 @@ class BoardAgentApp(App):
         self.notify(f"{ACTION_LABELS.get(action, action)}: {key}")
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        # Only the task table drives the detail panel. The keys table in
+        # Settings is also a DataTable — its row keys are API key strings,
+        # not task ids, and int() would crash the app.
+        if event.data_table.id != "task-list":
+            return
         self.selected_task_id = int(event.row_key.value)
         task = self._selected_task()
         if task is None:
@@ -830,6 +856,17 @@ class BoardAgentApp(App):
             action = widget.id[len("kb-val-"):]
             current = self.keybinds.get(action, "")
             self.push_screen(KeyCaptureScreen(action, current))
+
+    def on_key(self, event) -> None:
+        """Enter/Space on a focused keybind value opens the capture screen."""
+        if event.key not in ("enter", "space"):
+            return
+        focused = self.focused
+        if focused is not None and focused.id and focused.id.startswith("kb-val-"):
+            action = focused.id[len("kb-val-"):]
+            current = self.keybinds.get(action, "")
+            self.push_screen(KeyCaptureScreen(action, current))
+            event.stop()
 
     def on_tabbed_content_tab_activated(self, event) -> None:
         if event.tab.id == "settings":
