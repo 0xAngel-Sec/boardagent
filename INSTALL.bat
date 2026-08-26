@@ -27,15 +27,23 @@ echo [1/5] stopped old instances
 
 REM -- 2. copy files -------------------------------------------------
 if not exist "%APP_DIR%" mkdir "%APP_DIR%"
-if not exist "%~dp0dist\boardagent-server.exe" (
-    echo [ERROR] dist\boardagent-server.exe not found.
-    echo         Build the exes first, then run this installer:
+REM Source the exes from THIS folder (release zip layout) or dist\ (repo
+REM layout). Whichever has them wins, so the same installer works in the
+REM release zip AND after building from source.
+if exist "%~dp0boardagent-server.exe" (
+    set "SRC=%~dp0"
+) else (
+    set "SRC=%~dp0dist\"
+)
+if not exist "%SRC%boardagent-server.exe" (
+    echo [ERROR] boardagent-server.exe not found.
+    echo         If building from source, run this first:
     echo         python scripts\build_exes.py
     goto :fail
 )
-copy /y "dist\boardagent-server.exe" "%SERVER_EXE%" >nul || goto :copyfail
-copy /y "dist\boardagent.exe"        "%TUI_EXE%" >nul || goto :copyfail
-if exist "dist\boardagent-mcp.exe" copy /y "dist\boardagent-mcp.exe" "%MCP_EXE%" >nul || goto :copyfail
+copy /y "%SRC%boardagent-server.exe" "%SERVER_EXE%" >nul || goto :copyfail
+copy /y "%SRC%boardagent.exe"        "%TUI_EXE%" >nul || goto :copyfail
+if exist "%SRC%boardagent-mcp.exe" copy /y "%SRC%boardagent-mcp.exe" "%MCP_EXE%" >nul || goto :copyfail
 echo [2/5] binaries copied to %APP_DIR%
 
 REM -- 3. autostart at logon (background, no console window) -------
