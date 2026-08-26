@@ -15,10 +15,164 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Healthz'
+  /settings:
+    get:
+      summary: Get Settings
+      operationId: get_settings_settings_get
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerSettings'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      summary: Put Settings
+      operationId: put_settings_settings_put
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServerSettings'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerSettings'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /keys:
+    get:
+      summary: List Keys
+      operationId: list_keys_keys_get
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKey'
+                title: Response List Keys Keys Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      summary: Create Key
+      operationId: create_key_keys_post
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKey'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /keys/{key}:
+    delete:
+      summary: Delete Key
+      operationId: delete_key_keys__key__delete
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Key
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /tasks:
     post:
       summary: Create Task
       operationId: create_task_tasks_post
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       requestBody:
         required: true
         content:
@@ -66,6 +220,32 @@ paths:
           - type: string
           - type: 'null'
           title: Owner
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 500
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       responses:
         '200':
           description: Successful Response
@@ -90,6 +270,14 @@ paths:
         schema:
           type: integer
           title: Task Id
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       responses:
         '200':
           description: Successful Response
@@ -113,6 +301,14 @@ paths:
         schema:
           type: integer
           title: Task Id
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       requestBody:
         required: true
         content:
@@ -142,6 +338,14 @@ paths:
         schema:
           type: integer
           title: Task Id
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       responses:
         '204':
           description: Successful Response
@@ -162,6 +366,14 @@ paths:
         schema:
           type: integer
           title: Task Id
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       requestBody:
         required: true
         content:
@@ -192,6 +404,14 @@ paths:
         schema:
           type: integer
           title: Task Id
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       requestBody:
         required: true
         content:
@@ -215,32 +435,92 @@ paths:
     get:
       summary: Priority Values
       operationId: priority_values_tasks_schema_priority_get
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
+                type: array
                 items:
                   type: string
-                type: array
                 title: Response Priority Values Tasks Schema Priority Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /tasks/schema/status:
     get:
       summary: Status Values
       operationId: status_values_tasks_schema_status_get
+      parameters:
+      - name: x-api-key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: X-Api-Key
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
+                type: array
                 items:
                   type: string
-                type: array
                 title: Response Status Values Tasks Schema Status Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    ApiKey:
+      properties:
+        key:
+          type: string
+          title: Key
+        name:
+          type: string
+          title: Name
+        role:
+          $ref: '#/components/schemas/Role'
+      type: object
+      required:
+      - key
+      - name
+      - role
+      title: ApiKey
+    ApiKeyCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+        role:
+          $ref: '#/components/schemas/Role'
+          default: read
+      type: object
+      required:
+      - name
+      title: ApiKeyCreate
     HTTPValidationError:
       properties:
         detail:
@@ -273,6 +553,37 @@ components:
       - blue
       - white
       title: Priority
+    Role:
+      type: string
+      enum:
+      - read
+      - write
+      - admin
+      title: Role
+      description: API key permission level.
+    ServerSettings:
+      properties:
+        host:
+          type: string
+          maxLength: 255
+          title: Host
+          default: 127.0.0.1
+        port:
+          type: integer
+          maximum: 65535.0
+          minimum: 1.0
+          title: Port
+          default: 7373
+        api_enabled:
+          type: boolean
+          title: Api Enabled
+          default: true
+        mcp_enabled:
+          type: boolean
+          title: Mcp Enabled
+          default: true
+      type: object
+      title: ServerSettings
     Status:
       type: string
       enum:
@@ -311,6 +622,42 @@ components:
         status:
           $ref: '#/components/schemas/Status'
           default: todo
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        estimate:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Estimate
+        links:
+          items:
+            type: string
+          type: array
+          title: Links
+        acceptance_criteria:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acceptance Criteria
+        dependencies:
+          items:
+            type: string
+          type: array
+          title: Dependencies
+        notes:
+          items:
+            type: string
+          type: array
+          title: Notes
+        custom_fields:
+          additionalProperties:
+            type: string
+          type: object
+          title: Custom Fields
         id:
           type: integer
           title: Id
@@ -331,6 +678,7 @@ components:
           type: string
           format: date-time
           title: Updated At
+      additionalProperties: false
       type: object
       required:
       - title
@@ -390,6 +738,42 @@ components:
         status:
           $ref: '#/components/schemas/Status'
           default: todo
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        estimate:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Estimate
+        links:
+          items:
+            type: string
+          type: array
+          title: Links
+        acceptance_criteria:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acceptance Criteria
+        dependencies:
+          items:
+            type: string
+          type: array
+          title: Dependencies
+        notes:
+          items:
+            type: string
+          type: array
+          title: Notes
+        custom_fields:
+          additionalProperties:
+            type: string
+          type: object
+          title: Custom Fields
         metadata:
           anyOf:
           - additionalProperties: true
@@ -402,6 +786,7 @@ components:
             maxLength: 100
           - type: 'null'
           title: Agent Id
+      additionalProperties: false
       type: object
       required:
       - title
@@ -455,6 +840,52 @@ components:
           anyOf:
           - $ref: '#/components/schemas/Status'
           - type: 'null'
+        tags:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tags
+        estimate:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Estimate
+        links:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Links
+        acceptance_criteria:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acceptance Criteria
+        dependencies:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Dependencies
+        notes:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Notes
+        custom_fields:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Custom Fields
         metadata:
           anyOf:
           - additionalProperties: true

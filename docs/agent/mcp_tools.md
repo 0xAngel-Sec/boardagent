@@ -1,229 +1,83 @@
-# BoardAgent MCP Tools (agent docs)
+# BoardAgent MCP Tools — Agent Reference
 
-Transport: stdio. Command: `boardagent-mcp`
+Transport: stdio. Command: `boardagent-mcp` (or `boardagent-mcp.exe`). Auth: optional `BOARDAGENT_API_KEY` env var; without it, unauthenticated local mode (all tools allowed).
 
 ## Tools
 
 ### boardagent_create_task
-
-Create a new task. Priority is a color: red/orange/yellow/green/blue/white.
+Create a task. `priority` is a color. `status` defaults `todo`. `metadata` namespaced under `agent_id`.
 
 ```json
 {
-  "type": "object",
-  "properties": {
-    "title": {
-      "type": "string",
-      "description": "Task title"
-    },
-    "description": {
-      "type": "string"
-    },
-    "due": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "priority": {
-      "type": "string",
-      "enum": [
-        "red",
-        "orange",
-        "yellow",
-        "green",
-        "blue",
-        "white"
-      ],
-      "default": "white"
-    },
-    "project": {
-      "type": "string"
-    },
-    "status": {
-      "type": "string",
-      "enum": [
-        "todo",
-        "in_progress",
-        "blocked",
-        "done"
-      ],
-      "default": "todo"
-    },
-    "agent_id": {
-      "type": "string",
-      "description": "Agent namespace for metadata"
-    },
-    "metadata": {
-      "type": "object",
-      "description": "Freeform JSON metadata"
-    }
-  },
-  "required": [
-    "title"
-  ]
+  "title": "string (required)",
+  "description": "string",
+  "due": "ISO8601",
+  "priority": "white|blue|green|yellow|orange|red",
+  "project": "string",
+  "status": "todo|in_progress|blocked|done",
+  "agent_id": "string",
+  "metadata": "object",
+  "tags": ["string"],
+  "estimate": "string",
+  "links": ["string"],
+  "acceptance_criteria": "string",
+  "dependencies": ["string"],
+  "notes": ["string"],
+  "custom_fields": {"k": "v"}
 }
 ```
 
 ### boardagent_list_tasks
-
-List tasks, optionally filtered.
+Filter + paginate. `limit` max 500.
 
 ```json
-{
-  "type": "object",
-  "properties": {
-    "status": {
-      "type": "string",
-      "enum": [
-        "todo",
-        "in_progress",
-        "blocked",
-        "done"
-      ]
-    },
-    "project": {
-      "type": "string"
-    },
-    "owner": {
-      "type": "string"
-    }
-  }
-}
+{"status": "enum", "project": "string", "owner": "string", "limit": 100, "offset": 0}
 ```
 
 ### boardagent_get_task
-
-Read a single task by id.
-
 ```json
-{
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "integer"
-    }
-  },
-  "required": [
-    "id"
-  ]
-}
+{"id": 1}
 ```
 
 ### boardagent_update_task
-
-Update a task. Metadata is merged into agent_id's namespace.
+PATCH semantics: omitted = unchanged, `null` = clear, `[]`/`{}` = clear list/dict. `metadata` needs `agent_id`.
 
 ```json
-{
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "integer"
-    },
-    "title": {
-      "type": "string"
-    },
-    "description": {
-      "type": "string"
-    },
-    "due": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "priority": {
-      "type": "string",
-      "enum": [
-        "red",
-        "orange",
-        "yellow",
-        "green",
-        "blue",
-        "white"
-      ]
-    },
-    "project": {
-      "type": "string"
-    },
-    "status": {
-      "type": "string",
-      "enum": [
-        "todo",
-        "in_progress",
-        "blocked",
-        "done"
-      ]
-    },
-    "agent_id": {
-      "type": "string"
-    },
-    "metadata": {
-      "type": "object"
-    }
-  },
-  "required": [
-    "id"
-  ]
-}
+{"id": 1, "title": "string", "description": "string", "due": "ISO8601", "priority": "enum", "project": "string", "status": "enum", "agent_id": "string", "metadata": "object", "tags": ["string"], "estimate": "string", "links": ["string"], "acceptance_criteria": "string", "dependencies": ["string"], "notes": ["string"], "custom_fields": {"k": "v"}}
 ```
 
 ### boardagent_delete_task
-
-Delete a task by id.
-
 ```json
-{
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "integer"
-    }
-  },
-  "required": [
-    "id"
-  ]
-}
+{"id": 1}
 ```
 
 ### boardagent_claim_task
-
-Claim/lock a todo task for an agent. Returns an error if unavailable.
+Atomic claim: requires `status==todo` and unowned. Errors: `already_claimed`.
 
 ```json
-{
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "integer"
-    },
-    "agent_id": {
-      "type": "string"
-    }
-  },
-  "required": [
-    "id",
-    "agent_id"
-  ]
-}
+{"id": 1, "agent_id": "string"}
 ```
 
 ### boardagent_complete_task
-
-Mark a task done. Only the owning agent may complete it.
+Requires `owner_agent_id == agent_id`. Errors: `not_owner`, `invalid_transition`.
 
 ```json
-{
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "integer"
-    },
-    "agent_id": {
-      "type": "string"
-    }
-  },
-  "required": [
-    "id",
-    "agent_id"
-  ]
-}
+{"id": 1, "agent_id": "string"}
 ```
 
+## Error protocol
+
+Failures return `isError: true` with JSON text:
+
+```json
+{"error": "message", "code": "already_claimed|not_owner|invalid_transition|not_found|boardagent_error|internal|unknown_tool"}
+```
+
+Check `isError` — never string-parse success. `internal` = server bug, retry later.
+
+## Agent conventions
+
+- Claim before work. Never complete what you don't own.
+- Namespace metadata: always pass `agent_id` with metadata writes.
+- Append to `notes` (read → extend → PATCH full list).
+- Paginate: `limit=100` on large boards.
