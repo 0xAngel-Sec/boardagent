@@ -313,29 +313,55 @@ class SettingsSelect(Select, inherit_bindings=False):
 
 
 class KeysTable(DataTable):
-    """API-keys table whose mouse hover moves the cursor.
+    """API-keys table with edge-aware arrow navigation.
 
-    Textual's DataTable hover only paints a highlight (hover_coordinate);
-    it never moves cursor_coordinate. So Delete Selected read cursor_row
-    (stuck at the top) even after hovering another key. This subclass keeps
-    the cursor on the hovered row so what you see selected IS what you get.
+    Textual's DataTable consumes up/down in its own bindings before any
+    App-level handler runs, so at the top/bottom edge the keys feel dead
+    (cursor clamps in place). These overrides move focus out of the table
+    at the edges instead.
+
+    The cursor-placement fight: when focus ENTERS this table via an arrow
+    key, Textual re-dispatches that same key to the newly-focused table
+    (its action_cursor_up/down runs a second time). Moving the cursor to
+    the target row first, then letting that re-dispatched action decrement/
+    increment it, is what produced the "lands on second-lowest" bug. A
+    one-shot pending_entry flag swallows the re-delivered key and pins the
+    cursor to the correct edge instead.
     """
 
-    def _on_mouse_move(self, event) -> None:
-        super()._on_mouse_move(event)
-        try:
-            meta = getattr(event.style, "meta", None) or {}
-            row = meta.get("row")
-            if (
-                row is not None
-                and 0 <= row < self.row_count
-                and self.show_cursor
-                and self.cursor_type != "none"
-                and self.cursor_row != row
-            ):
-                self.move_cursor(row=row, column=0)
-        except Exception:
-            pass
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.pending_entry: tuple[str, float] | None = None
+
+    def action_cursor_up(self) -> None:
+        if self.pending_entry:
+            direction, ts = self.pending_entry
+            self.pending_entry = None
+            if direction == "up" and time.monotonic() - ts < 0.3:
+                if self.row_count:
+                    self.move_cursor(row=self.row_count - 1, column=0)
+                return
+        if self.cursor_row is None or self.cursor_row > 0 or not self.row_count:
+            super().action_cursor_up()
+        else:
+            self.screen.focus_previous()
+
+    def action_cursor_down(self) -> None:
+        if self.pending_entry:
+            direction, ts = self.pending_entry
+            self.pending_entry = None
+            if direction == "down" and time.monotonic() - ts < 0.3:
+                if self.row_count:
+                    self.move_cursor(row=0, column=0)
+                return
+        if self.cursor_row is None or self.cursor_row < self.row_count - 1:
+            super().action_cursor_down()
+        else:
+            self.screen.focus_next()
+
+    def _on_click(self, event) -> None:
+        self.pending_entry = None
+        return super()._on_click(event)
 
 
 class ConfirmScreen(Screen[bool]):
@@ -430,6 +456,14 @@ class BoardAgentApp(App):
     .kb-row Static:focus { background: $primary; color: $background; text-style: bold; }
     Footer { background: $surface; }
     .keys-actions Button:focus { background: $primary; color: $background; text-style: bold; }
+    /* The keys table's selected row must be obvious even when the table
+       isn't focused (after hovering/clicking), otherwise users can't tell
+       which key is selected. Textual only draws a strong cursor on :focus. */
+    #keys-table > .datatable--cursor {
+        background: $primary;
+        color: $background;
+        text-style: bold;
+    }
     """
 
     BINDINGS = [
@@ -1029,6 +1063,15 @@ class BoardAgentApp(App):
         table = self.query_one("#keys-table", DataTable)
         if len(table.columns) != 3:
             table.add_columns("Name", "Role", "Key")
+        # Preserve the selected key across re-renders. remove_row()/add_row()
+        # otherwise reset the cursor to the top row, so a selection the user
+        # just made visibly disappears on the next refresh (tab re-activation,
+        # after creating a key, etc.).
+        selected_key = None
+        if table.cursor_row is not None and table.row_count:
+            row = table.get_row_at(table.cursor_row)
+            if row:
+                selected_key = row[2]
         for key in list(table.rows):
             table.remove_row(key)
         for k in self.api_keys:
@@ -1038,6 +1081,12 @@ class BoardAgentApp(App):
                 k.get("key", ""),
                 key=k.get("key", ""),
             )
+        if selected_key is not None:
+            for idx in range(table.row_count):
+                row = table.get_row_at(idx)
+                if row and row[2] == selected_key:
+                    table.move_cursor(row=idx, column=0)
+                    break
 
     async def _save_backend_settings(self) -> None:
         try:
@@ -1211,7 +1260,14 @@ class BoardAgentApp(App):
                         "delete-key",
                     ):
                         if event.key == "down":
-                            self.query_one("#keys-table").focus()
+                            table = self.query_one("#keys-table")
+                            # focus() is deferred (call_later), so the key is
+                            # NOT re-dispatched to the table — move the cursor
+                            # explicitly. pending_entry is a safety net.
+                            table.pending_entry = ("down", time.monotonic())
+                            if table.row_count:
+                                table.move_cursor(row=0, column=0)
+                            table.focus()
                         else:
                             self.query_one("#mcp-enabled").focus()
                         event.stop()
@@ -1228,9 +1284,18 @@ class BoardAgentApp(App):
                     elif isinstance(focused, DataTable):
                         return  # other tables keep native behavior
                     if event.key == "down":
-                        self.screen.focus_next()
+                        target = self.screen.focus_next()
                     else:
-                        self.screen.focus_previous()
+                        target = self.screen.focus_previous()
+                    # Entering the keys table must place the cursor
+                    # deterministically, otherwise it keeps whatever stale row
+                    # it had (moving up from the keybinds used to land on the
+                    # second-lowest key instead of the lowest). Down from
+                    # above -> top row; up from below -> bottom row. The
+                    # table's pending_entry swallows the re-dispatched arrow
+                    # key and pins the edge row (see KeysTable docstring).
+                    if target is not None and target.id == "keys-table":
+                        target.pending_entry = (event.key, time.monotonic())
                     event.stop()
             except Exception:
                 pass
