@@ -185,6 +185,21 @@ class TaskTable(DataTable):
         self.zebra_stripes = True
 
 
+class SettingsSelect(Select):
+    """Select that only opens its overlay on SPACE.
+
+    Textual's Select binds enter/down/up/space to show_overlay, which makes
+    arrow-key navigation through the settings page open the dropdown instead
+    of moving. _inherit_bindings=False drops the base bindings entirely.
+    """
+
+    _inherit_bindings = False
+
+    BINDINGS = [
+        ("space", "show_overlay", "Select"),
+    ]
+
+
 class ConfirmScreen(Screen[bool]):
     """Modal yes/no confirmation (Textual 8 removed App.confirm)."""
 
@@ -255,7 +270,7 @@ class BoardAgentApp(App):
     Screen { align: center middle; }
     TabbedContent { height: 1fr; }
     TabPane { height: 1fr; }
-    #task-list { width: 100%; height: 100%; }
+    #task-list { width: 1fr; height: 100%; }
     #detail-panel { width: 44%; height: 100%; border: solid $primary; padding: 1 2; }
     #detail-content { width: 100%; height: auto; }
     #detail-actions { height: 3; padding: 1 0; }
@@ -411,7 +426,7 @@ class BoardAgentApp(App):
             with TabPane("Settings", id="settings"):
                 yield VerticalScroll(
                     Label("Theme", classes="settings-label"),
-                    Select(
+                    SettingsSelect(
                         ((name, name) for name in THEME.list()),
                         value=self.active_theme,
                         id="theme-select",
@@ -454,7 +469,7 @@ class BoardAgentApp(App):
                     DataTable(id="keys-table", cursor_type="row"),
                     Horizontal(
                         Input(placeholder="Key name", id="key-name"),
-                        Select(
+                        SettingsSelect(
                             ((r, r) for r in (ROLE_READ, ROLE_WRITE, ROLE_ADMIN)),
                             value=ROLE_READ,
                             id="key-role",
@@ -606,6 +621,37 @@ class BoardAgentApp(App):
         self.ai_mode = not self.ai_mode
         self.settings["ai_mode"] = self.ai_mode
         _save_settings(self.settings)
+
+    def action_switch_tab(self) -> None:
+        """Tab toggles between the Tasks and Settings tabs."""
+        # Debounce: after a Select overlay dismisses, Textual can re-deliver
+        # the same key event, firing this action twice and toggling back.
+        import time
+
+        now = time.monotonic()
+        if now - getattr(self, "_last_tab_switch", 0) < 0.15:
+            return
+        self._last_tab_switch = now
+        try:
+            tabs = self.query_one(TabbedContent)
+            target = "settings" if tabs.active == "tasks" else "tasks"
+            tabs.active = target
+            # Move focus into the target tab. If a widget in the hidden pane
+            # keeps focus (e.g. a Select after its overlay dismissed), Textual
+            # can re-activate the old pane.
+            if target == "tasks":
+                self.query_one(TaskTable).focus()
+            else:
+                self.query_one("#theme-select").focus()
+        except Exception:
+            pass
+
+    def action_focus_next(self) -> None:
+        """Tab: switch tabs on the main screen, move focus on modals."""
+        if len(self._screen_stack) <= 1:
+            self.action_switch_tab()
+        else:
+            self.screen.focus_next()
 
     async def action_create(self) -> None:
         if not self.service_up:
@@ -920,15 +966,37 @@ class BoardAgentApp(App):
             self.push_screen(KeyCaptureScreen(action, current))
 
     def on_key(self, event) -> None:
-        """Enter/Space on a focused keybind value opens the capture screen."""
-        if event.key not in ("enter", "space"):
-            return
+        """Keyboard navigation helpers.
+
+        - Enter/Space on a focused keybind value opens the capture screen.
+        - Up/Down inside the Settings tab move focus between fields (Tab is
+          reserved for switching tabs).
+        """
         focused = self.focused
-        if focused is not None and focused.id and focused.id.startswith("kb-val-"):
-            action = focused.id[len("kb-val-"):]
-            current = self.keybinds.get(action, "")
-            self.push_screen(KeyCaptureScreen(action, current))
-            event.stop()
+        if event.key in ("enter", "space"):
+            if focused is not None and focused.id and focused.id.startswith("kb-val-"):
+                action = focused.id[len("kb-val-"):]
+                current = self.keybinds.get(action, "")
+                self.push_screen(KeyCaptureScreen(action, current))
+                event.stop()
+            return
+        if event.key in ("up", "down") and len(self._screen_stack) <= 1:
+            try:
+                tabs = self.query_one(TabbedContent)
+                # DataTables (keys table) handle up/down natively for cursor
+                # movement — don't hijack them.
+                if (
+                    tabs.active == "settings"
+                    and focused is not None
+                    and not isinstance(focused, DataTable)
+                ):
+                    if event.key == "down":
+                        self.screen.focus_next()
+                    else:
+                        self.screen.focus_previous()
+                    event.stop()
+            except Exception:
+                pass
 
     def on_tabbed_content_tab_activated(self, event) -> None:
         if event.tab.id == "settings":
@@ -948,7 +1016,7 @@ class CreateTaskScreen(Screen):
             yield Label("[b]Create Task[/b]")
             yield Input(placeholder="Title", id="title")
             yield Input(placeholder="Project", id="project")
-            yield Select(
+            yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
                 value="white",
                 id="priority",
@@ -1000,7 +1068,7 @@ class EditTaskScreen(Screen):
             yield Label(f"[b]Edit #{self.task['id']}[/b]")
             yield Input(value=self.task.get("title", ""), id="title")
             yield Input(value=self.task.get("project") or "", id="project")
-            yield Select(
+            yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
                 value=self.task.get("priority", "white"),
                 id="priority",
