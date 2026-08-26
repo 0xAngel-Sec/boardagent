@@ -80,6 +80,18 @@ DEFAULT_SERVER_SETTINGS: dict[str, Any] = {
 }
 
 
+def _atomic_write(path: Path, data: str) -> None:
+    """Write a JSON file atomically: temp file + os.replace.
+
+    A crash or concurrent write mid-write would otherwise corrupt the file.
+    os.replace is atomic on the same filesystem, so readers never see a
+    half-written file.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(data, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def load_server_settings() -> dict[str, Any]:
     """Load persisted server settings, merged over defaults."""
     settings: dict[str, Any] = dict(DEFAULT_SERVER_SETTINGS)
@@ -107,7 +119,7 @@ def save_server_settings(settings: dict[str, Any]) -> None:
     for key in DEFAULT_SERVER_SETTINGS:
         if key in settings:
             data[key] = settings[key]
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    _atomic_write(path, json.dumps(data, indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -120,21 +132,49 @@ ROLE_ADMIN = "admin"
 ROLES = (ROLE_READ, ROLE_WRITE, ROLE_ADMIN)
 
 
+_keys_cache: dict[str, Any] = {"mtime": None, "data": {}}
+
+
 def load_api_keys() -> dict[str, dict[str, str]]:
-    """Load API keys: {key: {"name": ..., "role": ...}}."""
+    """Load API keys: {key: {"name": ..., "role": ...}}.
+
+    Cached with mtime-based invalidation so the hot auth path doesn't hit
+    the filesystem on every request.
+    """
     path = keys_path()
+    try:
+        mtime = path.stat().st_mtime if path.exists() else None
+    except OSError:
+        mtime = None
+    if _keys_cache["mtime"] == mtime:
+        return _keys_cache["data"]
+    data: dict[str, dict[str, str]] = {}
     if path.exists():
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                data = parsed
         except Exception:
-            pass
-    return {}
+            # Corrupt keys file: back it up and log loudly rather than
+            # silently returning {} (which would lock everyone out with no
+            # way to recover via the API).
+            import logging
+
+            logging.getLogger("boardagent").error(
+                "keys.json is corrupt; backing up to keys.json.bad"
+            )
+            try:
+                os.replace(path, path.with_suffix(".bad"))
+            except OSError:
+                pass
+    _keys_cache["mtime"] = mtime
+    _keys_cache["data"] = data
+    return data
 
 
 def save_api_keys(keys: dict[str, dict[str, str]]) -> None:
-    keys_path().write_text(json.dumps(keys, indent=2), encoding="utf-8")
+    _atomic_write(keys_path(), json.dumps(keys, indent=2))
+    _keys_cache["mtime"] = None  # force reload on next read
 
 
 def generate_api_key() -> str:
@@ -167,4 +207,4 @@ def save_keybinds(keybinds: dict[str, str]) -> None:
         except Exception:
             data = {}
     data["keybinds"] = keybinds
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    _atomic_write(path, json.dumps(data, indent=2))

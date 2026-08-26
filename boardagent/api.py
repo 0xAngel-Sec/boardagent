@@ -139,9 +139,13 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         status: Status | None = None,
         project: str | None = None,
         owner: str | None = None,
+        limit: int | None = Query(default=None, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
         _: str = Depends(require_read),
     ) -> dict[str, Any]:
-        tasks = svc.list_tasks(status=status, project=project, owner=owner)
+        tasks = svc.list_tasks(
+            status=status, project=project, owner=owner, limit=limit, offset=offset
+        )
         return {"tasks": [_serialize(t) for t in tasks], "count": len(tasks)}
 
     @app.get("/tasks/{task_id}", response_model=Task)
@@ -155,10 +159,12 @@ def create_app(service: TaskService | None = None) -> FastAPI:
 
     @app.patch("/tasks/{task_id}", response_model=Task)
     async def update_task(
-        task_id: int, update: TaskUpdate, _: str = Depends(require_write)
+        task_id: int,
+        update: TaskUpdate,
+        caller_role: str = Depends(require_write),
     ) -> dict[str, Any]:
         try:
-            task = svc.update_task(task_id, update)
+            task = svc.update_task(task_id, update, caller_role=caller_role)
         except BoardAgentError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if task is None:
@@ -218,7 +224,13 @@ def _serialize(task: dict[str, Any]) -> dict[str, Any]:
             try:
                 task[key] = datetime.fromisoformat(task[key])
             except ValueError:
-                pass
+                # Malformed stored timestamp: log loudly instead of silently
+                # passing a string that fails response-model validation.
+                import logging
+
+                logging.getLogger("boardagent").warning(
+                    "malformed timestamp in %s: %r", key, task.get(key)
+                )
     return task
 
 
@@ -226,13 +238,31 @@ app = create_app()
 
 
 def _port_in_use(host: str, port: int) -> bool:
+    """True only if a live BoardAgent is answering on the port.
+
+    A bare TCP connect would report "already running" if any other process
+    holds the port, silently masking a dead BoardAgent. Verify the HTTP
+    healthz payload before declaring the service alive.
+    """
     import socket
 
-    s = socket.socket()
-    s.settimeout(1)
     try:
-        s.connect((host, port))
-        return True
+        s = socket.create_connection((host, port), timeout=1)
+    except OSError:
+        return False
+    try:
+        s.sendall(
+            b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+        )
+        data = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+            if b"\r\n\r\n" in data:
+                break
+        return b'"status":"ok"' in data or b'"status": "ok"' in data
     except OSError:
         return False
     finally:

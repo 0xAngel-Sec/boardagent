@@ -103,6 +103,8 @@ TOOLS = [
                 "status": {"type": "string", "enum": [s.value for s in Status]},
                 "project": {"type": "string"},
                 "owner": {"type": "string"},
+                "limit": {"type": "integer", "description": "Max rows (1-500)"},
+                "offset": {"type": "integer", "description": "Skip N rows"},
             },
         },
     ),
@@ -225,6 +227,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
     async def on_call_tool(ctx, params):  # noqa: ARG001
         name = params.name
         args = params.arguments or {}
+        is_error = False
         try:
             _require(TOOL_ROLES.get(name, ROLE_READ))
 
@@ -254,12 +257,18 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     status=status,
                     project=args.get("project"),
                     owner=args.get("owner"),
+                    limit=args.get("limit"),
+                    offset=args.get("offset", 0),
                 )
                 text = _to_json({"tasks": tasks, "count": len(tasks)})
 
             elif name == "boardagent_get_task":
                 task = svc.get_task(args["id"])
-                text = _to_json(task if task else {"error": "task not found"})
+                if task is None:
+                    text = json.dumps({"error": "task not found", "code": "not_found"})
+                    is_error = True
+                else:
+                    text = _to_json(task)
 
             elif name == "boardagent_update_task":
                 update = TaskUpdate(
@@ -280,10 +289,19 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     notes=args.get("notes"),
                 )
                 result = svc.update_task(args["id"], update)
-                text = _to_json(result if result else {"error": "task not found"})
+                if result is None:
+                    text = json.dumps({"error": "task not found", "code": "not_found"})
+                    is_error = True
+                else:
+                    text = _to_json(result)
 
             elif name == "boardagent_delete_task":
-                text = json.dumps({"deleted": svc.delete_task(args["id"])})
+                deleted = svc.delete_task(args["id"])
+                if not deleted:
+                    text = json.dumps({"error": "task not found", "code": "not_found"})
+                    is_error = True
+                else:
+                    text = json.dumps({"deleted": True})
 
             elif name == "boardagent_claim_task":
                 result = svc.claim_task(args["id"], TaskClaim(agent_id=args["agent_id"]))
@@ -296,20 +314,33 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 text = _to_json(result)
 
             else:
-                text = json.dumps({"error": f"unknown tool {name}"})
+                text = json.dumps({"error": f"unknown tool {name}", "code": "unknown_tool"})
+                is_error = True
 
         except AlreadyClaimedError as exc:
             text = json.dumps({"error": str(exc), "code": "already_claimed"})
+            is_error = True
         except NotOwnerError as exc:
             text = json.dumps({"error": str(exc), "code": "not_owner"})
+            is_error = True
         except InvalidTransitionError as exc:
             text = json.dumps({"error": str(exc), "code": "invalid_transition"})
+            is_error = True
         except BoardAgentError as exc:
-            text = json.dumps({"error": str(exc)})
-        except Exception as exc:  # noqa: BLE001
-            text = json.dumps({"error": f"internal error: {exc}"})
+            text = json.dumps({"error": str(exc), "code": "boardagent_error"})
+            is_error = True
+        except Exception:  # noqa: BLE001
+            # Never leak exception internals (paths, SQL fragments) to the
+            # client. Log server-side, return a generic error.
+            import logging
 
-        return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
+            logging.getLogger("boardagent").exception("MCP tool %s failed", name)
+            text = json.dumps({"error": "internal error", "code": "internal"})
+            is_error = True
+
+        return types.CallToolResult(
+            content=[types.TextContent(type="text", text=text)], isError=is_error
+        )
 
     return Server(
         "boardagent",

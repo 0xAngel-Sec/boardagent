@@ -65,6 +65,8 @@ class TaskBase(BaseModel):
     notes: list[str] = Field(default_factory=list)
     custom_fields: dict[str, str] = Field(default_factory=dict)
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class TaskCreate(TaskBase):
     metadata: dict[str, Any] | None = None

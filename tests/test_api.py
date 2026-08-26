@@ -459,3 +459,84 @@ class TestTaskFields:
         assert task["dependencies"] == ["#2"]
         assert task["notes"] == ["n"]
         assert task["custom_fields"] == {"k": "v"}
+
+
+class TestReviewFixes:
+    """Regression tests for the ds-v4-pro adversarial review findings."""
+
+    def test_patch_status_cannot_bypass_ownership(self, client, keys_file):
+        # Finding #2: PATCH status must not bypass claim/complete ownership.
+        # Use a write-role key (admin legitimately bypasses ownership).
+        r = client.post(
+            "/keys", json={"name": "writer", "role": "write"}, headers=_auth(keys_file)
+        )
+        write_key = r.json()["key"]
+
+        r = client.post("/tasks", json={"title": "owned"}, headers=_auth(write_key))
+        tid = r.json()["id"]
+        client.post(f"/tasks/{tid}/claim", json={"agent_id": "owner"}, headers=_auth(write_key))
+
+        # A write-role caller cannot mark someone else's task done via PATCH.
+        r = client.patch(f"/tasks/{tid}", json={"status": "done"}, headers=_auth(write_key))
+        assert r.status_code == 400
+        # Cannot release someone else's claim.
+        r = client.patch(f"/tasks/{tid}", json={"status": "todo"}, headers=_auth(write_key))
+        assert r.status_code == 400
+        # Cannot set in_progress on an unowned task (must use claim).
+        r = client.post("/tasks", json={"title": "fresh"}, headers=_auth(write_key))
+        tid2 = r.json()["id"]
+        r = client.patch(f"/tasks/{tid2}", json={"status": "in_progress"}, headers=_auth(write_key))
+        assert r.status_code == 400
+
+    def test_null_clears_field(self, client, keys_file):
+        # Finding #3: explicit null must clear a nullable field.
+        r = client.post(
+            "/tasks",
+            json={"title": "t", "description": "keep me", "estimate": "2h"},
+            headers=_auth(keys_file),
+        )
+        tid = r.json()["id"]
+        r = client.patch(
+            f"/tasks/{tid}", json={"description": None, "estimate": None}, headers=_auth(keys_file)
+        )
+        assert r.status_code == 200
+        task = r.json()
+        assert task["description"] is None
+        assert task["estimate"] is None
+
+    def test_extra_forbid_on_create(self, client, keys_file):
+        # Finding #16: typo'd fields must be rejected loudly, not silently dropped.
+        r = client.post(
+            "/tasks", json={"title": "t", "priorty": "red"}, headers=_auth(keys_file)
+        )
+        assert r.status_code == 422
+
+    def test_pagination(self, client, keys_file):
+        # Finding #11: limit/offset must work.
+        for i in range(5):
+            client.post("/tasks", json={"title": f"t{i}"}, headers=_auth(keys_file))
+        r = client.get("/tasks?limit=2&offset=1", headers=_auth(keys_file))
+        assert r.status_code == 200
+        assert r.json()["count"] == 2
+        r = client.get("/tasks?limit=1000", headers=_auth(keys_file))
+        assert r.status_code == 422  # cap at 500
+
+    def test_due_normalized_utc(self, client, keys_file):
+        # Finding #13: naive due datetimes are stored UTC-aware.
+        r = client.post(
+            "/tasks",
+            json={"title": "t", "due": "2026-09-01T10:00:00"},
+            headers=_auth(keys_file),
+        )
+        assert r.status_code == 201
+        due = r.json()["due"]
+        assert due.endswith("+00:00") or due.endswith("Z"), due
+
+    def test_claim_race_guard(self, service):
+        # Finding #1: second claim on the same task must fail atomically.
+        task = service.create_task(TaskCreate(title="race"))
+        service.claim_task(task["id"], TaskClaim(agent_id="a1"))
+        with pytest.raises(AlreadyClaimedError):
+            service.claim_task(task["id"], TaskClaim(agent_id="a2"))
+        got = service.get_task(task["id"])
+        assert got["owner_agent_id"] == "a1"
