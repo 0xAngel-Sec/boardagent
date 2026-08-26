@@ -312,6 +312,32 @@ class SettingsSelect(Select, inherit_bindings=False):
         yield SettingsSelectOverlay().data_bind(compact=Select.compact)
 
 
+class KeysTable(DataTable):
+    """API-keys table whose mouse hover moves the cursor.
+
+    Textual's DataTable hover only paints a highlight (hover_coordinate);
+    it never moves cursor_coordinate. So Delete Selected read cursor_row
+    (stuck at the top) even after hovering another key. This subclass keeps
+    the cursor on the hovered row so what you see selected IS what you get.
+    """
+
+    def _on_mouse_move(self, event) -> None:
+        super()._on_mouse_move(event)
+        try:
+            meta = getattr(event.style, "meta", None) or {}
+            row = meta.get("row")
+            if (
+                row is not None
+                and 0 <= row < self.row_count
+                and self.show_cursor
+                and self.cursor_type != "none"
+                and self.cursor_row != row
+            ):
+                self.move_cursor(row=row, column=0)
+        except Exception:
+            pass
+
+
 class ConfirmScreen(Screen[bool]):
     """Modal yes/no confirmation (Textual 8 removed App.confirm)."""
 
@@ -403,6 +429,7 @@ class BoardAgentApp(App):
     .kb-row Static:hover { background: $boost; text-style: bold; }
     .kb-row Static:focus { background: $primary; color: $background; text-style: bold; }
     Footer { background: $surface; }
+    .keys-actions Button:focus { background: $primary; color: $background; text-style: bold; }
     """
 
     BINDINGS = [
@@ -475,6 +502,9 @@ class BoardAgentApp(App):
         await self.action_refresh()
         asyncio.create_task(self.refresh_settings_tab())
         self.set_interval(10, self.action_refresh)
+        # Footer is hidden while the Settings tab is active (it is a
+        # distraction there — you are already in the settings).
+        self._update_footer_visibility()
         # Focus the task table so arrows/enter/space work immediately.
         try:
             self.query_one(TaskTable).focus()
@@ -594,7 +624,7 @@ class BoardAgentApp(App):
                         Button("Delete Selected", id="delete-key"),
                         classes="keys-actions",
                     ),
-                    DataTable(id="keys-table", cursor_type="row"),
+                    KeysTable(id="keys-table", cursor_type="row"),
                     Label("Keybinds", classes="settings-section"),
                     *self._keybind_rows(),
                     Button("Save Settings", id="save-settings"),
@@ -765,8 +795,41 @@ class BoardAgentApp(App):
                 self.query_one(TaskTable).focus()
             else:
                 self.query_one("#theme-select").focus()
+            self._update_footer_visibility()
         except Exception:
             pass
+
+    def _update_footer_visibility(self) -> None:
+        """Hide the footer while the Settings tab is active.
+
+        The footer's key hints (q/r/a/c/e/d/l/t) only make sense on the
+        Tasks tab. Inside Settings it is noise, so it disappears there.
+        """
+        try:
+            tabs = self.query_one(TabbedContent)
+            footer = self.query_one(Footer)
+            footer.display = tabs.active != "settings"
+        except Exception:
+            pass
+
+    def _on_settings_tab(self) -> bool:
+        """True when the Settings tab is currently active."""
+        try:
+            tabs = self.query_one(TabbedContent)
+            return tabs.active == "settings"
+        except Exception:
+            return False
+
+    def _guard_task_actions(self) -> bool:
+        """Block task create/edit/delete/claim/complete while in Settings.
+
+        Returning True means the caller should abort. Users only manage
+        tasks from the Tasks tab — acting from Settings would be surprising.
+        """
+        if self._on_settings_tab():
+            self.notify("Switch to the Tasks tab to manage tasks.", severity="warning")
+            return True
+        return False
 
     def action_focus_next(self) -> None:
         """Tab: switch tabs on the main screen, move focus on modals."""
@@ -776,6 +839,8 @@ class BoardAgentApp(App):
             self.screen.focus_next()
 
     async def action_create(self) -> None:
+        if self._guard_task_actions():
+            return
         if not self.service_up:
             self.notify("Service not running.", severity="error")
             return
@@ -790,6 +855,8 @@ class BoardAgentApp(App):
         )
 
     async def action_edit(self) -> None:
+        if self._guard_task_actions():
+            return
         task = self._selected_task()
         if task is None:
             self.notify("Select a task first.", severity="warning")
@@ -797,6 +864,8 @@ class BoardAgentApp(App):
         self.push_screen(EditTaskScreen(task))
 
     async def action_delete(self) -> None:
+        if self._guard_task_actions():
+            return
         task = self._selected_task()
         if task is None:
             self.notify("Select a task first.", severity="warning")
@@ -824,6 +893,8 @@ class BoardAgentApp(App):
             self.notify(f"Delete failed: {exc}", severity="error")
 
     async def action_claim(self) -> None:
+        if self._guard_task_actions():
+            return
         task = self._selected_task()
         if task is None:
             self.notify("Select a task first.", severity="warning")
@@ -843,6 +914,8 @@ class BoardAgentApp(App):
             self.notify(f"Claim failed: {exc}", severity="error")
 
     async def action_complete(self) -> None:
+        if self._guard_task_actions():
+            return
         task = self._selected_task()
         if task is None:
             self.notify("Select a task first.", severity="warning")
@@ -1085,14 +1158,35 @@ class BoardAgentApp(App):
         - Enter/Space on a focused keybind value opens the capture screen.
         - Up/Down inside the Settings tab move focus between fields (Tab is
           reserved for switching tabs).
+        - Left/Right between the Create Key / Delete Selected buttons move
+          focus within the button group (up/down move focus between rows).
         """
         focused = self.focused
         if event.key in ("enter", "space"):
-            if focused is not None and focused.id and focused.id.startswith("kb-val-"):
-                action = focused.id[len("kb-val-"):]
-                current = self.keybinds.get(action, "")
-                self.push_screen(KeyCaptureScreen(action, current))
-                event.stop()
+            # Textual's Button only binds enter -> press; space needs a nudge
+            # here. (Enter on a Button is consumed by the button's own
+            # binding before this handler runs, so this only fires for space.)
+            if focused is not None:
+                if isinstance(focused, Button) and event.key == "space":
+                    focused.press()
+                    event.stop()
+                    return
+                if focused.id and focused.id.startswith("kb-val-"):
+                    action = focused.id[len("kb-val-"):]
+                    current = self.keybinds.get(action, "")
+                    self.push_screen(KeyCaptureScreen(action, current))
+                    event.stop()
+            return
+        if event.key in ("left", "right") and len(self._screen_stack) <= 1:
+            # Create Key / Delete Selected form a left/right button group:
+            # up/down leave the group, left/right switch between the two.
+            if focused is not None and focused.id in ("create-key", "delete-key"):
+                target = "delete-key" if focused.id == "create-key" else "create-key"
+                try:
+                    self.query_one(f"#{target}").focus()
+                    event.stop()
+                except Exception:
+                    pass
             return
         if event.key in ("up", "down") and len(self._screen_stack) <= 1:
             try:
@@ -1108,6 +1202,20 @@ class BoardAgentApp(App):
                     and focused is not None
                     and not isinstance(focused, SelectOverlay)
                 ):
+                    # The Create Key / Delete Selected buttons form a
+                    # left/right group: up/down LEAVE the group to the
+                    # sections above/below instead of moving between the
+                    # two buttons (left/right does that).
+                    if isinstance(focused, Button) and focused.id in (
+                        "create-key",
+                        "delete-key",
+                    ):
+                        if event.key == "down":
+                            self.query_one("#keys-table").focus()
+                        else:
+                            self.query_one("#mcp-enabled").focus()
+                        event.stop()
+                        return
                     # Keys table: let the cursor move within the table, but
                     # when it's at the edge (e.g. a single key row), move
                     # focus out so arrows never feel dead.
@@ -1128,6 +1236,7 @@ class BoardAgentApp(App):
                 pass
 
     def on_tabbed_content_tab_activated(self, event) -> None:
+        self._update_footer_visibility()
         if event.tab.id == "settings":
             asyncio.create_task(self.refresh_settings_tab())
 
