@@ -313,38 +313,92 @@ class SettingsSelect(Select, inherit_bindings=False):
 
 
 class KeysTable(DataTable):
-    """API-keys table: keyboard-first selection; hover only previews.
+    """API-keys table: keyboard-first, with a PIN that survives navigation.
 
-    The SELECTION is the cursor row — moved by ARROWS (native list
-    behavior) or a CLICK. Hover is a paint-only preview and never moves
-    the cursor, so a fully mouse-free workflow is deterministic: arrow
-    down to the key you want, delete from the button above.
+    Terminal-style model:
+    - The CURSOR row (bright block) is the navigation highlight — arrows
+      move it freely to browse the list.
+    - SPACE or ENTER pins the row under the cursor. The pin is marked
+      with a '>' prefix and is what Delete Selected acts on. Arrows NEVER
+      move the pin, so you can pin a key, arrow up to the Delete button,
+      and the right key stays selected. (This was the bug: delete hit the
+      row the cursor had crawled to — usually the top — instead of the
+      key you wanted.)
+    - 'd' deletes the pinned key directly, no button travel needed.
+    - Clicks select natively (cursor moves); hover is fully dead.
 
-    Up/Down move the cursor natively within the table; at the edges the
-    cursor exits focus instead of clamping (top edge -> Delete Selected
-    button, bottom edge -> the keybinds below), so arrows keep flowing.
-
-    Cursor-placement fight: when focus ENTERS this table via an arrow
-    key, Textual re-dispatches that same key to the newly-focused table
-    (its action_cursor_up/down runs one more time). A one-shot
-    pending_entry flag swallows the re-delivered key and pins the cursor
-    to the entry edge (bottom for up-entry, top for down-entry), so it
-    can't land on a "second-lowest" row.
+    Cursor-placement fight: when focus ENTERS this table via an arrow key,
+    Textual re-dispatches that same key to the newly-focused table (its
+    action_cursor_up/down runs one more time). A one-shot pending_entry
+    flag swallows the re-delivered key and pins the cursor to the entry
+    edge (bottom for up-entry, top for down-entry), so it can't land on a
+    "second-lowest" row.
     """
+
+    BINDINGS = [
+        ("space", "pin", "Pin"),
+        ("enter", "pin", "Pin"),
+        ("d", "delete_pinned", "Delete"),
+    ]
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.pending_entry: tuple[str, float] | None = None
+        self.pinned_key: str | None = None
 
     def _on_mouse_move(self, event) -> None:
         """Mouse hover is intentionally DEAD for the keys table.
 
         No preview highlight, no cursor movement. Textual's stock hover
         paint made the mouse-following row look like a selection while the
-        real selection (the cursor) sat elsewhere — "it chooses the last
-        one hovered". Terminal style: the ONLY selection visual is the
-        cursor row (arrows or click). The mouse should not imply anything.
+        real selection (the cursor or the pin) sat elsewhere. The mouse
+        should not imply anything.
         """
+
+    def action_pin(self) -> None:
+        """Pin the row under the cursor (toggle).
+
+        The pin is what Delete Selected acts on; arrows never move it.
+        Toggling unpins the row. The '>' marker is painted in place so a
+        full table re-render (and its app-data dependency) is not needed.
+        """
+        if self.cursor_row is None or not self.row_count:
+            return
+        key = self.get_row_at(self.cursor_row)[2]
+        if self.pinned_key == key:
+            self.pinned_key = None
+            self._set_pin_marker(key, False)
+            return
+        if self.pinned_key:
+            self._set_pin_marker(self.pinned_key, False)
+        self.pinned_key = key
+        self._set_pin_marker(key, True)
+
+    def _set_pin_marker(self, key: str, pinned: bool) -> None:
+        """Prefix/unprefix '>' on the row with the given key."""
+        try:
+            if not self.ordered_columns:
+                return
+            name_col = self.ordered_columns[0].key  # the "Name" column
+            for row_key in self.rows:
+                if getattr(row_key, "value", None) == key:
+                    name = str(self.get_row(row_key)[0])
+                    if name.startswith("> "):
+                        name = name[2:]
+                    self.update_cell(
+                        row_key, name_col, ("> " if pinned else "") + name
+                    )
+                    break
+        except Exception as exc:
+            import traceback
+
+            traceback.print_exc()
+
+    async def action_delete_pinned(self) -> None:
+        """Delete the pinned key (or the cursor row as fallback)."""
+        app = getattr(self, "app", None)
+        if app is not None and hasattr(app, "_delete_selected_key"):
+            await app._delete_selected_key()
 
     def action_cursor_up(self) -> None:
         if self.pending_entry:
@@ -1095,15 +1149,24 @@ class BoardAgentApp(App):
             row = table.get_row_at(table.cursor_row)
             if row:
                 selected_key = row[2]
+        pinned = getattr(table, "pinned_key", None)
         for key in list(table.rows):
             table.remove_row(key)
         for k in self.api_keys:
+            name = k.get("name", "")
+            # '>' marks the pinned key — the one Delete Selected acts on.
+            if pinned and k.get("key") == pinned:
+                name = f"> {name}"
             table.add_row(
-                k.get("name", ""),
+                name,
                 k.get("role", ""),
                 k.get("key", ""),
                 key=k.get("key", ""),
             )
+        # If the pinned key still exists, put the cursor on it (the pin and
+        # cursor converge); otherwise clear the pin (it was deleted).
+        if pinned and pinned not in {k.get("key") for k in self.api_keys}:
+            table.pinned_key = None
         if selected_key is not None:
             for idx in range(table.row_count):
                 row = table.get_row_at(idx)
@@ -1133,12 +1196,16 @@ class BoardAgentApp(App):
 
     async def _delete_selected_key(self) -> None:
         table = self.query_one("#keys-table", DataTable)
-        if table.cursor_row is None:
-            self.notify("Select a key first.", severity="warning")
-            return
-        row_key = table.coordinate_to_cell_key((table.cursor_row, 0))
-        key = table.get_row_at(table.cursor_row)[2]
+        # The PIN is the selection: deleting acts on the pinned key even if
+        # the cursor has been arrowed elsewhere (e.g. up to the Delete
+        # button). Falls back to the cursor row when nothing is pinned.
+        key = None
+        if getattr(table, "pinned_key", None):
+            key = table.pinned_key
+        elif table.cursor_row is not None and table.row_count:
+            key = table.get_row_at(table.cursor_row)[2]
         if not key:
+            self.notify("Select a key first.", severity="warning")
             return
         self.push_screen(
             ConfirmScreen(f"Delete API key {key[:12]}...?"),
