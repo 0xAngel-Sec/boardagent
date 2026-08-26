@@ -125,9 +125,12 @@ class TaskService:
         is_admin = caller_role == ROLE_ADMIN
 
         if new_status == Status.IN_PROGRESS.value:
-            if owner is None and not is_admin:
+            # Even admins must go through claim for unowned tasks: setting
+            # in_progress without an owner creates an unclaimable,
+            # uncompletable deadlock.
+            if owner is None:
                 raise BoardAgentError("use claim to start work on a task")
-            if owner is not None and owner != caller_agent_id and not is_admin:
+            if owner != caller_agent_id and not is_admin:
                 raise NotOwnerError("only the owning agent can start this task")
         elif new_status == Status.DONE.value:
             if owner != caller_agent_id and not is_admin:
@@ -151,9 +154,11 @@ class TaskService:
             return None
 
         # Status transitions must respect ownership (see _check_status_transition).
+        # The client's agent_id (same field the claim/complete endpoints use)
+        # is the caller identity for the ownership check.
         if update.status is not None:
             self._check_status_transition(
-                existing, update.status.value, caller_agent_id, caller_role
+                existing, update.status.value, update.agent_id, caller_role
             )
 
         # Distinguish "field omitted" from "explicitly set to null" so the

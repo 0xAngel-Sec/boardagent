@@ -108,33 +108,40 @@ class TaskStore:
         notes: list[str] | None = None,
     ) -> int:
         conn = self._connection()
-        cur = conn.execute(
-            """
-            INSERT INTO tasks (title, description, due, priority, project, status, owner_agent_id, metadata, tags, estimate, custom_fields, links, acceptance_criteria, dependencies, notes, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                title,
-                description,
-                due,
-                priority,
-                project,
-                status,
-                None,
-                json.dumps(metadata, ensure_ascii=False),
-                json.dumps(tags or [], ensure_ascii=False),
-                estimate,
-                json.dumps(custom_fields or {}, ensure_ascii=False),
-                json.dumps(links or [], ensure_ascii=False),
-                acceptance_criteria,
-                json.dumps(dependencies or [], ensure_ascii=False),
-                json.dumps(notes or [], ensure_ascii=False),
-                now,
-                now,
-            ),
-        )
-        conn.commit()
-        return cur.lastrowid  # type: ignore[return-value]
+        try:
+            cur = conn.execute(
+                """
+                INSERT INTO tasks (title, description, due, priority, project, status, owner_agent_id, metadata, tags, estimate, custom_fields, links, acceptance_criteria, dependencies, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    title,
+                    description,
+                    due,
+                    priority,
+                    project,
+                    status,
+                    None,
+                    json.dumps(metadata, ensure_ascii=False),
+                    json.dumps(tags or [], ensure_ascii=False),
+                    estimate,
+                    json.dumps(custom_fields or {}, ensure_ascii=False),
+                    json.dumps(links or [], ensure_ascii=False),
+                    acceptance_criteria,
+                    json.dumps(dependencies or [], ensure_ascii=False),
+                    json.dumps(notes or [], ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+            return cur.lastrowid  # type: ignore[return-value]
+        except Exception:
+            # A failed write leaves an open transaction on the thread-local
+            # connection; roll back so the next BEGIN IMMEDIATE doesn't fail
+            # with "cannot start a transaction within a transaction".
+            conn.rollback()
+            raise
 
     def get_task(self, task_id: int) -> dict[str, Any] | None:
         conn = self._connection()
@@ -266,12 +273,16 @@ class TaskStore:
         second UPDATE matches zero rows.
         """
         conn = self._connection()
-        cur = conn.execute(
-            "UPDATE tasks SET status = 'in_progress', owner_agent_id = ?, updated_at = ? "
-            "WHERE id = ? AND status = 'todo' AND owner_agent_id IS NULL",
-            (agent_id, now, task_id),
-        )
-        conn.commit()
+        try:
+            cur = conn.execute(
+                "UPDATE tasks SET status = 'in_progress', owner_agent_id = ?, updated_at = ? "
+                "WHERE id = ? AND status = 'todo' AND owner_agent_id IS NULL",
+                (agent_id, now, task_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         if cur.rowcount == 0:
             return None
         return self.get_task(task_id)
@@ -280,12 +291,16 @@ class TaskStore:
         """Atomically complete a task owned by agent_id. Returns None if the
         task is gone or the ownership/status guard fails."""
         conn = self._connection()
-        cur = conn.execute(
-            "UPDATE tasks SET status = 'done', updated_at = ? "
-            "WHERE id = ? AND owner_agent_id = ? AND status != 'done'",
-            (now, task_id, agent_id),
-        )
-        conn.commit()
+        try:
+            cur = conn.execute(
+                "UPDATE tasks SET status = 'done', updated_at = ? "
+                "WHERE id = ? AND owner_agent_id = ? AND status != 'done'",
+                (now, task_id, agent_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         if cur.rowcount == 0:
             return None
         return self.get_task(task_id)

@@ -39,6 +39,7 @@ from .config import (
     ROLE_ADMIN,
     ROLE_READ,
     ROLE_WRITE,
+    _atomic_write,
     generate_api_key,
     load_api_keys,
     load_keybinds,
@@ -108,7 +109,20 @@ def _load_settings() -> dict[str, Any]:
 
 
 def _save_settings(settings: dict[str, Any]) -> None:
-    settings_path().write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    """Persist settings, merging over the existing file.
+
+    A bare overwrite would clobber co-existing keys (console_key, keybinds)
+    written by other writers — causing console-key churn and keybind loss.
+    """
+    path = settings_path()
+    data: dict[str, Any] = {}
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    data.update(settings)
+    _atomic_write(path, json.dumps(data, indent=2))
 
 
 def _load_console_key() -> str:

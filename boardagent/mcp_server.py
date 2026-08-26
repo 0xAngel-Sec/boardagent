@@ -253,11 +253,16 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
 
             elif name == "boardagent_list_tasks":
                 status = Status(args["status"]) if "status" in args else None
+                limit = args.get("limit")
+                if limit is not None:
+                    # Clamp to the same bounds the REST API enforces; a
+                    # negative limit would make SQLite return the whole table.
+                    limit = max(1, min(500, int(limit)))
                 tasks = svc.list_tasks(
                     status=status,
                     project=args.get("project"),
                     owner=args.get("owner"),
-                    limit=args.get("limit"),
+                    limit=limit,
                     offset=args.get("offset", 0),
                 )
                 text = _to_json({"tasks": tasks, "count": len(tasks)})
@@ -288,7 +293,12 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     dependencies=args.get("dependencies"),
                     notes=args.get("notes"),
                 )
-                result = svc.update_task(args["id"], update)
+                result = svc.update_task(
+                    args["id"],
+                    update,
+                    caller_agent_id=args.get("agent_id"),
+                    caller_role=auth_role,
+                )
                 if result is None:
                     text = json.dumps({"error": "task not found", "code": "not_found"})
                     is_error = True

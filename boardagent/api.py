@@ -260,7 +260,11 @@ def _port_in_use(host: str, port: int) -> bool:
             if not chunk:
                 break
             data += chunk
-            if b"\r\n\r\n" in data:
+            # Headers and body can arrive in separate packets; keep reading
+            # until the healthz payload is present or the connection closes.
+            if b'"status"' in data:
+                break
+            if len(data) > 8192:
                 break
         return b'"status":"ok"' in data or b'"status": "ok"' in data
     except OSError:

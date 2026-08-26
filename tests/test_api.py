@@ -540,3 +540,43 @@ class TestReviewFixes:
             service.claim_task(task["id"], TaskClaim(agent_id="a2"))
         got = service.get_task(task["id"])
         assert got["owner_agent_id"] == "a1"
+
+    def test_owner_can_transition_own_task_via_patch(self, client, keys_file):
+        # GLM finding #2: the owning agent (via agent_id) can PATCH their own
+        # claimed task's status — block, release, etc.
+        r = client.post(
+            "/keys", json={"name": "writer", "role": "write"}, headers=_auth(keys_file)
+        )
+        write_key = r.json()["key"]
+        r = client.post("/tasks", json={"title": "mine"}, headers=_auth(write_key))
+        tid = r.json()["id"]
+        client.post(f"/tasks/{tid}/claim", json={"agent_id": "me"}, headers=_auth(write_key))
+
+        r = client.patch(
+            f"/tasks/{tid}",
+            json={"status": "blocked", "agent_id": "me"},
+            headers=_auth(write_key),
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "blocked"
+
+        # Release back to todo clears the claim.
+        r = client.patch(
+            f"/tasks/{tid}",
+            json={"status": "todo", "agent_id": "me"},
+            headers=_auth(write_key),
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "todo"
+        assert r.json()["owner_agent_id"] is None
+
+    def test_admin_cannot_deadlock_unowned_task(self, client, keys_file):
+        # GLM finding #3: even admin cannot set in_progress on an unowned
+        # task — that would create an unclaimable, uncompletable deadlock.
+        r = client.post("/tasks", json={"title": "fresh"}, headers=_auth(keys_file))
+        tid = r.json()["id"]
+        r = client.patch(f"/tasks/{tid}", json={"status": "in_progress"}, headers=_auth(keys_file))
+        assert r.status_code == 400
+        got = client.get(f"/tasks/{tid}", headers=_auth(keys_file)).json()
+        assert got["status"] == "todo"
+        assert got["owner_agent_id"] is None
