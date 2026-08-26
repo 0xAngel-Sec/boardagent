@@ -40,6 +40,7 @@ from .service import (
     InvalidTransitionError,
     NotOwnerError,
     BoardAgentError,
+    TaskNotFoundError,
     TaskService,
 )
 
@@ -212,15 +213,16 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
     if not settings.get("mcp_enabled", True):
         raise BoardAgentError("MCP disabled in settings")
 
-    def _require(required: str) -> None:
+    def _require(required: str) -> str | None:
         # Re-check auth per call: load_api_keys is mtime-cached, so this is
         # cheap, and role changes (key rotation/demotion) take effect
         # without an MCP server restart.
         auth_role = _check_auth()
         if auth_role is None:
-            return  # unauthenticated local mode: allow everything
+            return None  # unauthenticated local mode: allow everything
         if ROLE_RANK.get(auth_role, 0) < ROLE_RANK[required]:
             raise BoardAgentError("insufficient permissions")
+        return auth_role
 
     async def on_list_tools(ctx, params):  # noqa: ARG001
         return types.ListToolsResult(tools=TOOLS)
@@ -230,7 +232,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
         args = params.arguments or {}
         is_error = False
         try:
-            _require(TOOL_ROLES.get(name, ROLE_READ))
+            auth_role = _require(TOOL_ROLES.get(name, ROLE_READ))
 
             if name == "boardagent_create_task":
                 create = TaskCreate(
@@ -340,6 +342,9 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
             is_error = True
         except InvalidTransitionError as exc:
             text = json.dumps({"error": str(exc), "code": "invalid_transition"})
+            is_error = True
+        except TaskNotFoundError as exc:
+            text = json.dumps({"error": str(exc), "code": "not_found"})
             is_error = True
         except BoardAgentError as exc:
             text = json.dumps({"error": str(exc), "code": "boardagent_error"})

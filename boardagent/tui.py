@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+from rich.markup import escape as rich_escape
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -166,7 +167,7 @@ def _load_console_key() -> str:
         key = generate_api_key()
         settings["console_key"] = key
         _save_settings(settings)
-    keys[key] = {"name": "console", "role": ROLE_ADMIN}
+    keys[key] = {"name": "console", "role": ROLE_ADMIN, "console": True}
     save_api_keys(keys)
     return key
 
@@ -1134,42 +1135,42 @@ class BoardAgentApp(App):
         sc = colors.get(f"status-{status}", "")
         pc = colors.get(f"priority-{priority}", "")
         lines = [
-            f"[b]#{task['id']} {task['title']}[/b]\n",
+            f"[b]#{task['id']} {rich_escape(str(task['title']))}[/b]\n",
             f"Status: [{sc}]{status}[/]" if sc else f"Status: {status}",
             f"Priority: [{pc}]{priority}[/]" if pc else f"Priority: {priority}",
-            f"Project: {task.get('project') or '-'}",
-            f"Owner: {task.get('owner_agent_id') or '-'}",
+            f"Project: {rich_escape(task.get('project') or '-')}",
+            f"Owner: {rich_escape(task.get('owner_agent_id') or '-')}",
         ]
         if task.get("due"):
-            lines.append(f"Due: {task['due']}")
+            lines.append(f"Due: {rich_escape(task['due'])}")
         if task.get("estimate"):
-            lines.append(f"Estimate: {task['estimate']}")
+            lines.append(f"Estimate: {rich_escape(task['estimate'])}")
         tags = task.get("tags") or []
         if tags:
-            lines.append(f"Tags: {', '.join(tags)}")
+            lines.append(f"Tags: {rich_escape(', '.join(tags))}")
         links = task.get("links") or []
         if links:
-            lines.append(f"Links: {', '.join(links)}")
+            lines.append(f"Links: {rich_escape(', '.join(links))}")
         deps = task.get("dependencies") or []
         if deps:
-            lines.append(f"Dependencies: {', '.join(deps)}")
+            lines.append(f"Dependencies: {rich_escape(', '.join(deps))}")
         if task.get("description"):
-            lines.append(f"\n{task['description']}")
+            lines.append(f"\n{rich_escape(task['description'])}")
         if task.get("acceptance_criteria"):
-            lines.append(f"\n[b]Acceptance criteria[/b]\n{task['acceptance_criteria']}")
+            lines.append(f"\n[b]Acceptance criteria[/b]\n{rich_escape(task['acceptance_criteria'])}")
         notes = task.get("notes") or []
         if notes:
             lines.append("\n[b]Notes[/b]")
             for n in notes:
-                lines.append(f"- {n}")
+                lines.append(f"- {rich_escape(n)}")
         custom = task.get("custom_fields") or {}
         if custom:
             lines.append("\n[b]Custom fields[/b]")
             for k, v in custom.items():
-                lines.append(f"{k}: {v}")
+                lines.append(f"{rich_escape(k)}: {rich_escape(v)}")
         if self.ai_mode and task.get("metadata"):
             lines.append("\n[b]Metadata[/b]")
-            lines.append(json.dumps(task["metadata"], indent=2, default=str))
+            lines.append(rich_escape(json.dumps(task["metadata"], indent=2, default=str)))
         detail.update("\n".join(lines))
         for bid, enabled in (
             ("btn-claim", status == "todo"),
@@ -1273,6 +1274,24 @@ class BoardAgentApp(App):
             return
         api_enabled = self.query_one("#api-enabled", Checkbox).value
         mcp_enabled = self.query_one("#mcp-enabled", Checkbox).value
+        if not api_enabled:
+            # Disabling the API makes the server refuse to start, which
+            # locks the TUI out with no way to flip it back via the app.
+            self.notify(
+                "Cannot disable the API from the TUI — the app would lose "
+                "its backend. Edit settings.json manually if you really need this.",
+                severity="warning",
+                timeout=6,
+            )
+            return
+        host = host.lower()
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            self.notify(
+                "Non-loopback host: API keys travel in CLEARTEXT over HTTP. "
+                "Only use on a trusted network.",
+                severity="warning",
+                timeout=6,
+            )
         self.server_settings.update(
             {
                 "host": host,

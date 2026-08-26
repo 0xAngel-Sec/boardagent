@@ -2,6 +2,8 @@
 
 Transport: stdio. Command: `boardagent-mcp` (or `boardagent-mcp.exe`). Auth: optional `BOARDAGENT_API_KEY` env var; without it, unauthenticated local mode (all tools allowed).
 
+Machine-readable schemas: `mcp_tools.json` (Python-side dump, snake_case keys — for reference only, not the JSON-RPC wire format) and `openapi.json/yaml` (REST spec, `inputSchema`/camelCase in MCP terms).
+
 ## Tools
 
 ### boardagent_create_task
@@ -73,7 +75,9 @@ Failures return `isError: true` with JSON text:
 {"error": "message", "code": "already_claimed|not_owner|invalid_transition|not_found|boardagent_error|internal|unknown_tool"}
 ```
 
-Check `isError` — never string-parse success. `internal` = server bug, retry later. `boardagent_error` is a catch-all that also covers auth/role failures (invalid API key, insufficient permissions, MCP disabled) — distinct from `internal`.
+`not_found` is emitted by get/update/delete/claim/complete for a missing task.
+
+Check `isError` — never string-parse success. `internal` = server bug, retry later. `boardagent_error` is a catch-all that also covers auth/role failures (invalid API key, insufficient permissions). If MCP is disabled in settings, the server refuses to start entirely — no tool call will ever succeed.
 
 ## Agent conventions
 

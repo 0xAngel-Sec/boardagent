@@ -44,6 +44,8 @@ class ApiKey(BaseModel):
 
 
 class ServerSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     host: str = Field(default="127.0.0.1", max_length=255)
     port: int = Field(default=7373, ge=1, le=65535)
     api_enabled: bool = True

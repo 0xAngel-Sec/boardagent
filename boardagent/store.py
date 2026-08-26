@@ -5,7 +5,7 @@ import json
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 # Sentinel: distinguishes "field omitted" from "explicitly set to null".
 # Pydantic's model_fields_set tells us which fields the caller actually sent;
@@ -185,29 +185,35 @@ class TaskStore:
     def update_task(
         self,
         task_id: int,
-        title: Any = _UNSET,
-        description: Any = _UNSET,
-        due: Any = _UNSET,
-        priority: Any = _UNSET,
-        project: Any = _UNSET,
-        status: Any = _UNSET,
-        owner_agent_id: Any = _UNSET,
-        metadata: Any = _UNSET,
-        now: str = "",
+        *,
+        title=_UNSET,
+        description=_UNSET,
+        due=_UNSET,
+        priority=_UNSET,
+        project=_UNSET,
+        status=_UNSET,
+        owner_agent_id=_UNSET,
+        metadata=_UNSET,
+        tags=_UNSET,
+        estimate=_UNSET,
+        custom_fields=_UNSET,
+        links=_UNSET,
+        acceptance_criteria=_UNSET,
+        dependencies=_UNSET,
+        notes=_UNSET,
+        now: str,
         clear_owner: bool = False,
-        tags: Any = _UNSET,
-        estimate: Any = _UNSET,
-        custom_fields: Any = _UNSET,
-        links: Any = _UNSET,
-        acceptance_criteria: Any = _UNSET,
-        dependencies: Any = _UNSET,
-        notes: Any = _UNSET,
+        transition_check: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any] | None:
         """Update a task inside a single write transaction.
 
         Read + write happen under BEGIN IMMEDIATE so two concurrent PATCHes
         cannot both merge against a stale read (lost update). Fields passed
         as _UNSET keep their current value; explicit None clears the column.
+        If transition_check is given, it runs against the FRESH row read
+        inside this transaction — closing the TOCTOU where a status
+        transition validated against a stale snapshot could clobber a
+        concurrent claim/complete.
         """
         conn = self._connection()
         conn.execute("BEGIN IMMEDIATE")
@@ -219,6 +225,9 @@ class TaskStore:
                 conn.rollback()
                 return None
             existing = self._row_to_dict(row)
+
+            if transition_check is not None:
+                transition_check(existing)
 
             def pick(field: str, new: Any) -> Any:
                 if field == "owner_agent_id" and clear_owner:

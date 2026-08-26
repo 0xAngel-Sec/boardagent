@@ -6,7 +6,8 @@ can see the same board, pick up tasks, and mark them done — without you
 copy-pasting anything between tools.
 
 Everything stays on your machine. No account, no cloud, no subscription.
-Your tasks live in a single file on your disk.
+Your tasks live in a single file on your disk (a few small settings files
+live alongside it).
 
 ## What you see
 

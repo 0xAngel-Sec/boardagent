@@ -38,6 +38,9 @@ hermes gateway restart
 hermes mcp test boardagent
 ```
 
+Run those in a normal terminal — not from inside a Hermes chat session
+(the gateway cannot restart itself from within).
+
 The last command should list the seven BoardAgent tools. If it does, you
 are connected.
 

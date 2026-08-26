@@ -41,8 +41,9 @@ If you want the server to start every time you log in to Windows, use
 4. Choose "When I log on" as the trigger.
 5. Choose "Start a program" as the action.
 6. Browse to `boardagent-server.exe` and select it.
-7. Finish, then right-click the task, open Properties, and check "Run
-   with highest privileges" and "Hidden."
+7. Finish, then right-click the task, open Properties, and check
+   **Hidden**. Leave "Run with highest privileges" **unticked** — the
+   server works fine without admin rights.
 
 From now on the server starts on its own when you log in. You just open
 the app whenever you need it.

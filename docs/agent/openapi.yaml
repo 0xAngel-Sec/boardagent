@@ -24,12 +24,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '200':
           description: Successful Response
@@ -53,12 +50,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       requestBody:
         required: true
         content:
@@ -89,12 +83,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '200':
           description: Successful Response
@@ -121,12 +112,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       requestBody:
         required: true
         content:
@@ -163,12 +151,9 @@ paths:
           title: Key
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '204':
           description: Successful Response
@@ -178,6 +163,8 @@ paths:
           description: Insufficient role or not the owner
         '404':
           description: Task or key not found
+        '400':
+          description: Bad transition or invalid request
         '422':
           description: Validation Error
           content:
@@ -191,12 +178,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       requestBody:
         required: true
         content:
@@ -268,12 +252,9 @@ paths:
           title: Offset
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '200':
           description: Successful Response
@@ -304,12 +285,9 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '200':
           description: Successful Response
@@ -341,12 +319,9 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       requestBody:
         required: true
         content:
@@ -386,12 +361,9 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '204':
           description: Successful Response
@@ -420,12 +392,9 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       requestBody:
         required: true
         content:
@@ -466,12 +435,9 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       requestBody:
         required: true
         content:
@@ -506,12 +472,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '200':
           description: Successful Response
@@ -539,12 +502,9 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: X-Api-Key
+          type: string
       responses:
         '200':
           description: Successful Response
@@ -658,6 +618,7 @@ components:
           type: boolean
           title: Mcp Enabled
           default: true
+      additionalProperties: false
       type: object
       title: ServerSettings
     Status:

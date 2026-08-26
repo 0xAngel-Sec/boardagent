@@ -20,6 +20,18 @@ def fetch_openapi(base_url: str) -> dict:
 
 
 def dump_openapi_docs(spec: dict) -> None:
+    # The X-API-Key header is required for every endpoint except /healthz
+    # (missing key → 401). FastAPI renders Header(default=None) as optional,
+    # so fix the requiredness here — reproducible from source.
+    for path in spec.get("paths", {}).values():
+        for op in path.values():
+            if not isinstance(op, dict) or "parameters" not in op:
+                continue
+            for param in op["parameters"]:
+                if param.get("in") == "header" and param.get("name", "").lower() == "x-api-key":
+                    param["required"] = True
+                    param.pop("anyOf", None)  # drop the [string, null] union
+                    param["schema"] = {"type": "string"}
     AGENT_DOCS.mkdir(parents=True, exist_ok=True)
     (AGENT_DOCS / "openapi.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
     (AGENT_DOCS / "openapi.yaml").write_text(yaml.safe_dump(spec, sort_keys=False), encoding="utf-8")

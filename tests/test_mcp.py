@@ -92,6 +92,45 @@ async def test_mcp_smoke_create_and_get(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_mcp_update_task(tmp_path):
+    """boardagent_update_task works end-to-end.
+
+    Regression: a prior refactor left an undefined `auth_role` reference in
+    this branch — every update call raised NameError and returned a generic
+    'internal' error. This test exercises the exact path that was dead.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+
+            result = await session.call_tool(
+                "boardagent_create_task",
+                arguments={"title": "to update", "agent_id": "u1"},
+            )
+            task = json.loads(result.content[0].text)
+            task_id = task["id"]
+
+            result = await session.call_tool(
+                "boardagent_update_task",
+                arguments={
+                    "id": task_id,
+                    "title": "updated via mcp",
+                    "description": "desc",
+                    "tags": ["mcp", "test"],
+                    "estimate": "2h",
+                    "agent_id": "u1",
+                },
+            )
+            assert result.is_error is not True, result.content[0].text
+            updated = json.loads(result.content[0].text)
+            assert updated["title"] == "updated via mcp"
+            assert updated["description"] == "desc"
+            assert updated["tags"] == ["mcp", "test"]
+            assert updated["estimate"] == "2h"
+
+
+@pytest.mark.anyio
 async def test_mcp_auth_roles(tmp_path, monkeypatch):
     """With BOARDAGENT_API_KEY set, role enforcement applies."""
     from boardagent import config as cfg

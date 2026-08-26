@@ -66,7 +66,7 @@ def _require_role(required: str):
     requirement. Requests without a key are rejected with 401.
     """
 
-    def dependency(x_api_key: str | None = Header(default=None)) -> str:
+    def dependency(x_api_key: str = Header(default=None)) -> str:
         keys = load_api_keys()
         if not x_api_key or x_api_key not in keys:
             raise HTTPException(status_code=401, detail="missing or invalid API key")
@@ -133,12 +133,12 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         save_api_keys(keys)
         return {"key": key, "name": create.name, "role": create.role}
 
-    @app.delete("/keys/{key}", status_code=204, responses={**AUTH_ERRORS, **NOT_FOUND})
+    @app.delete("/keys/{key}", status_code=204, responses={**AUTH_ERRORS, **NOT_FOUND, **BAD_REQUEST})
     async def delete_key(key: str, _: str = Depends(require_admin)) -> JSONResponse:
         keys = load_api_keys()
         if key not in keys:
             raise HTTPException(status_code=404, detail="key not found")
-        if keys[key].get("name") == "console":
+        if _is_console_key(key, keys):
             # The console key is the TUI's own admin credential. Deleting it
             # would lock the local UI out of the API, so it is protected.
             raise HTTPException(
@@ -282,9 +282,9 @@ def _port_in_use(host: str, port: int) -> bool:
             if not chunk:
                 break
             data += chunk
-            # Headers and body can arrive in separate packets; keep reading
-            # until the healthz payload is present or the connection closes.
-            if b'"status"' in data:
+            # Break only when the FULL payload is present. Breaking on a
+            # partial '"status"' (split across packets) would false-negative.
+            if b'"status":"ok"' in data or b'"status": "ok"' in data:
                 break
             if len(data) > 8192:
                 break
@@ -307,15 +307,36 @@ def _run_forever(host: str, port: int) -> None:
             return
         except KeyboardInterrupt:
             return
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:
             # If another instance owns the port while we were restarting
             # (watchdog + manual start race), bow out instead of
-            # crash-looping forever.
+            # crash-looping forever. uvicorn raises SystemExit(1) on bind
+            # failure, so SystemExit must be caught too.
             if _port_in_use(host, port):
                 print("another instance owns the port; exiting", flush=True)
                 return
             print(f"server crashed ({exc}); restarting in 2s", flush=True)
             time.sleep(2)
+
+
+def _is_console_key(key: str, keys: dict[str, dict[str, str]]) -> bool:
+    """True if the given key is the protected console credential.
+
+    Identified by the `console: true` flag, OR (for legacy keys created
+    before the flag existed) by matching the settings.json console_key
+    value, OR by the historical name marker. Never trust the name alone
+    for NEW keys — a user could create a key named "console".
+    """
+    if keys.get(key, {}).get("console"):
+        return True
+    settings: dict[str, Any] = {}
+    try:
+        settings = json.loads(settings_path().read_text(encoding="utf-8"))
+        if settings.get("console_key") == key:
+            return True
+    except Exception:
+        pass
+    return keys.get(key, {}).get("name") == "console" and settings.get("console_key") == key
 
 
 def _ensure_console_key() -> str:
@@ -343,12 +364,17 @@ def _ensure_console_key() -> str:
     key = settings.get("console_key")
     keys = load_api_keys()
     if key and key in keys:
+        # Backfill the protection flag on legacy keys (created before the
+        # flag existed) so delete_key's flag check covers them too.
+        if not keys[key].get("console"):
+            keys[key]["console"] = True
+            save_api_keys(keys)
         return key
     if not key:
         key = generate_api_key()
         settings["console_key"] = key
         save_server_settings(settings)
-    keys[key] = {"name": "console", "role": ROLE_ADMIN}
+    keys[key] = {"name": "console", "role": ROLE_ADMIN, "console": True}
     save_api_keys(keys)
     return key
 
@@ -360,7 +386,12 @@ def main() -> None:
 
     settings = load_server_settings()
     host = os.environ.get("BOARDAGENT_HOST", settings.get("host", DEFAULT_HOST))
-    port = int(os.environ.get("BOARDAGENT_PORT", settings.get("port", DEFAULT_PORT)))
+    try:
+        port = int(os.environ.get("BOARDAGENT_PORT", settings.get("port", DEFAULT_PORT)))
+    except (TypeError, ValueError):
+        # A corrupt env var or settings value must not crash startup.
+        print(f"invalid port value; using default {DEFAULT_PORT}", flush=True)
+        port = DEFAULT_PORT
     if not settings.get("api_enabled", True):
         print("API disabled in settings; refusing to start.", flush=True)
         sys.exit(1)
@@ -369,7 +400,7 @@ def main() -> None:
     # exists yet, mint one (the TUI creates its own on first use, but a
     # fresh install may start the server before the TUI ever runs).
     keys = load_api_keys()
-    if not any(info.get("name") == "console" for info in keys.values()):
+    if not any(info.get("console") for info in keys.values()):
         _ensure_console_key()
 
     if "--check" in sys.argv:  # watchdog probe: exit 0 if already running

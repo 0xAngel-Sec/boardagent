@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from .config import ROLE_ADMIN, db_path
 from .models import (
@@ -29,6 +29,10 @@ class NotOwnerError(BoardAgentError):
 
 
 class InvalidTransitionError(BoardAgentError):
+    pass
+
+
+class TaskNotFoundError(BoardAgentError):
     pass
 
 
@@ -159,11 +163,16 @@ class TaskService:
 
         # Status transitions must respect ownership (see _check_status_transition).
         # The client's agent_id (same field the claim/complete endpoints use)
-        # is the caller identity for the ownership check.
+        # is the caller identity for the ownership check. The check runs
+        # against the FRESH row inside the store's write transaction (via
+        # transition_check) so a stale pre-read cannot race a concurrent
+        # claim/complete.
+        transition_check: Callable[[dict[str, Any]], None] | None = None
         if update.status is not None:
-            self._check_status_transition(
-                existing, update.status.value, update.agent_id, caller_role
-            )
+            def transition_check(existing: dict[str, Any]) -> None:
+                self._check_status_transition(
+                    existing, update.status.value, update.agent_id, caller_role
+                )
 
         # Distinguish "field omitted" from "explicitly set to null" so the
         # store can clear nullable columns. model_fields_set is the set of
@@ -215,12 +224,20 @@ class TaskService:
 
         return self.store.update_task(
             task_id=task_id,
-            title=val("title"),
+            title=val("title") if val("title") is not None else _UNSET,
             description=val("description"),
             due=_normalize_due(update.due) if "due" in sent else _UNSET,
-            priority=update.priority.value if "priority" in sent else _UNSET,
+            priority=(
+                update.priority.value
+                if "priority" in sent and update.priority is not None
+                else _UNSET
+            ),
             project=val("project"),
-            status=update.status.value if "status" in sent else _UNSET,
+            status=(
+                update.status.value
+                if "status" in sent and update.status is not None
+                else _UNSET
+            ),
             owner_agent_id=owner_agent_id,
             metadata=metadata,
             now=self._now(),
@@ -232,6 +249,7 @@ class TaskService:
             acceptance_criteria=val("acceptance_criteria"),
             dependencies=list_val("dependencies"),
             notes=list_val("notes"),
+            transition_check=transition_check,
         )
 
     def delete_task(self, task_id: int) -> bool:
@@ -244,7 +262,7 @@ class TaskService:
         # Guard failed or task gone — distinguish for a clean error.
         task = self.store.get_task(task_id)
         if task is None:
-            raise BoardAgentError("task not found")
+            raise TaskNotFoundError("task not found")
         raise AlreadyClaimedError("task is not available for claiming")
 
     def complete_task(self, task_id: int, complete: TaskComplete) -> dict[str, Any]:
@@ -253,7 +271,7 @@ class TaskService:
             return updated
         task = self.store.get_task(task_id)
         if task is None:
-            raise BoardAgentError("task not found")
+            raise TaskNotFoundError("task not found")
         if task.get("owner_agent_id") != complete.agent_id:
             raise NotOwnerError("only the owning agent can complete this task")
         if task["status"] == Status.DONE.value:

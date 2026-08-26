@@ -134,21 +134,25 @@ ROLE_ADMIN = "admin"
 ROLES = (ROLE_READ, ROLE_WRITE, ROLE_ADMIN)
 
 
-_keys_cache: dict[str, Any] = {"mtime": None, "data": {}}
+_keys_cache: dict[str, Any] = {"key": None, "data": {}}
 
 
 def load_api_keys() -> dict[str, dict[str, str]]:
     """Load API keys: {key: {"name": ..., "role": ...}}.
 
-    Cached with mtime-based invalidation so the hot auth path doesn't hit
-    the filesystem on every request.
+    Cached with (mtime, size)-based invalidation so the hot auth path
+    doesn't hit the filesystem on every request. Size is included because
+    mtime alone has 1-second granularity on many filesystems — a key
+    deleted and re-created within the same second could otherwise serve
+    stale auth.
     """
     path = keys_path()
     try:
-        mtime = path.stat().st_mtime if path.exists() else None
+        st = path.stat() if path.exists() else None
+        key = (st.st_mtime_ns, st.st_size) if st else None
     except OSError:
-        mtime = None
-    if _keys_cache["mtime"] == mtime:
+        key = None
+    if _keys_cache["key"] == key:
         return _keys_cache["data"]
     data: dict[str, dict[str, str]] = {}
     if path.exists():
@@ -169,7 +173,7 @@ def load_api_keys() -> dict[str, dict[str, str]]:
                 os.replace(path, path.with_suffix(".bad"))
             except OSError:
                 pass
-    _keys_cache["mtime"] = mtime
+    _keys_cache["key"] = key
     _keys_cache["data"] = data
     return data
 

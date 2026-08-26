@@ -32,17 +32,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -82,17 +74,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -144,17 +128,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -198,17 +174,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -269,17 +237,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -295,6 +255,9 @@
           },
           "404": {
             "description": "Task or key not found"
+          },
+          "400": {
+            "description": "Bad transition or invalid request"
           },
           "422": {
             "description": "Validation Error",
@@ -317,17 +280,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -454,17 +409,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -515,17 +462,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -577,17 +516,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -652,17 +583,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -709,17 +632,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -786,17 +701,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -854,17 +761,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -910,17 +809,9 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "type": "string"
             }
           }
         ],
@@ -1081,6 +972,7 @@
             "default": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "ServerSettings"
       },

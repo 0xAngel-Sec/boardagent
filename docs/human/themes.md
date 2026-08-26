@@ -36,7 +36,8 @@ A theme file looks like this:
 
 - `name` — the name shown in Settings. Recommended; if omitted, the
   filename is used.
-- `colors` — the color settings. Required.
+- `colors` — the color settings. Recommended; without it the theme uses
+  default colors.
 - `description` — a note for yourself. Optional.
 
 Colors are written as hex codes (a `#` followed by six characters, like

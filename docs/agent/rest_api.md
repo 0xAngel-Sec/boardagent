@@ -20,7 +20,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
   "dependencies": ["string"],
   "notes": ["string"],
   "custom_fields": {"k": "v"},
-  "metadata": {"agent_id": {...}},
+  "metadata": {"<agent_id>": {...}},
   "owner_agent_id": "string|null",
   "created_at": "ISO8601",
   "updated_at": "ISO8601"
@@ -63,6 +63,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
 - `complete` requires `owner_agent_id == agent_id` and `status != done`.
 - PATCH `status` is guarded: cannot set `in_progress` on unowned task (use claim); cannot move a claimed task to done/blocked/todo unless you are the owner (pass your `agent_id` in the PATCH body; admin bypasses).
 - PATCH status ownership violations → **400** (not 403); among the claim/complete/PATCH path, ownership 403 comes only from `/complete`. (Insufficient role → 403 on any endpoint.)
+- `DELETE /keys/{key}` → **400** if the target is the protected console key.
 - Releasing to `todo` clears the owner.
 
 ## Errors
@@ -75,7 +76,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
 
 ## Notes for agents
 
-- `limit` max 500. Always paginate large boards: `?limit=100&offset=0`.
+- `limit` max 500; **omitted → every task** (no default cap). Always paginate explicitly: `?limit=100&offset=0`.
 - All timestamps UTC-aware. Send `due` with offset or naive (assumed UTC).
 - `metadata` is per-agent namespaced — never clobbers other agents.
 - Append to `notes` by reading, extending, PATCHing the full list.
