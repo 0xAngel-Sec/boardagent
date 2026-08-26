@@ -395,6 +395,8 @@ class BoardAgentApp(App):
     #settings-panel > * { margin: 1 0; }
     .settings-label { color: $text-muted; }
     .settings-section { text-style: bold; color: $primary; margin-top: 1; }
+    .keys-actions { height: 3; }
+    .keys-actions > * { margin: 0 1; }
     .kb-row { height: 3; }
     .kb-row > * { margin: 0 1; }
     .kb-row Static { padding: 0 1; }
