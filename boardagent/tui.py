@@ -202,15 +202,21 @@ class KeyCaptureScreen(Screen):
                 f"Current: {self.current}   (Esc to cancel)", id="capture-hint"
             )
 
-    def on_key(self, event) -> None:
+    async def _on_key(self, event) -> None:
+        """Intercept keys BEFORE the binding chain runs.
+
+        The screen's handle_key checks the full binding chain (including app
+        bindings) — so pressing an already-bound key like 'q' would fire quit
+        instead of being captured. Overriding _on_key here swallows every key
+        before dispatch_key ever runs.
+        """
         key = event.key
         if key in ("escape", "ctrl+c"):
             self.app.pop_screen()
-            return
-        if key in ("enter", "tab"):
-            return  # ignore navigation keys
-        self.app.set_keybind(self.action, key)  # type: ignore[attr-defined]
-        self.app.pop_screen()
+        elif key not in ("enter", "tab"):
+            self.app.set_keybind(self.action, key)  # type: ignore[attr-defined]
+            self.app.pop_screen()
+        event.stop()
 
 
 class BoardAgentApp(App):
@@ -230,6 +236,7 @@ class BoardAgentApp(App):
     .settings-section { text-style: bold; color: $primary; margin-top: 1; }
     .kb-row { height: 3; }
     .kb-row > * { margin: 0 1; }
+    .kb-row Static:hover { background: $boost; text-style: bold; }
     Footer { background: $surface; }
     """
 
@@ -611,10 +618,22 @@ class BoardAgentApp(App):
     def set_keybind(self, action: str, key: str) -> None:
         self.keybinds[action] = key
         save_keybinds(self.keybinds)
-        # Rebuild BINDINGS and refresh the footer.
-        self.BINDINGS = [
-            (k, a, ACTION_LABELS.get(a, a)) for a, k in self.keybinds.items()
-        ]
+        # Rebuild the ACTUAL dispatch map (self._bindings), not just the
+        # footer. Textual builds _bindings once at mount from the class-level
+        # BINDINGS; refresh_bindings() only repaints the footer. Rebuild the
+        # BindingsMap so the new key dispatches immediately.
+        from textual.binding import Binding, BindingsMap
+
+        new_map = BindingsMap()
+        for act, k in self.keybinds.items():
+            new_map._add_binding(
+                Binding(k, act, ACTION_LABELS.get(act, act), show=True)
+            )
+        # Preserve the command palette binding (added by App at init).
+        for key_, binding in self._bindings:
+            if binding.action in ("command_palette", "app.command_palette"):
+                new_map._add_binding(binding)
+        self._bindings = new_map
         self.refresh_bindings()
         try:
             self.query_one(f"#kb-val-{action}", Static).update(key)
@@ -801,6 +820,16 @@ class BoardAgentApp(App):
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "theme-select":
             self.apply_theme(str(event.value))
+
+    def on_click(self, event) -> None:
+        """Click a keybind value (hover-highlighted) to change it."""
+        widget = event.widget
+        if widget is None or not widget.id:
+            return
+        if widget.id.startswith("kb-val-"):
+            action = widget.id[len("kb-val-"):]
+            current = self.keybinds.get(action, "")
+            self.push_screen(KeyCaptureScreen(action, current))
 
     def on_tabbed_content_tab_activated(self, event) -> None:
         if event.tab.id == "settings":
