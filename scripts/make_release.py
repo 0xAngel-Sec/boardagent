@@ -58,6 +58,9 @@ def main() -> None:
                 "=========\n\n"
                 "1. Double-click INSTALL.bat\n"
                 "2. Open the app:  boardagent.exe  (or type 'boardagent')\n\n"
+                "First run: Windows may say 'unknown publisher' — click\n"
+                "More info -> Run anyway. That is normal; the exes are not\n"
+                "code-signed.\n\n"
                 "Uninstall: double-click uninstall.bat\n",
             )
     print(f"Release zip: {zip_path}")
