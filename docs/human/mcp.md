@@ -34,7 +34,6 @@ Run these commands in a terminal, replacing the path with your real one:
 
 ```bash
 hermes config set mcp_servers.boardagent.command "C:/path/to/boardagent-mcp.exe"
-hermes config set mcp_servers.boardagent.type stdio
 hermes gateway restart
 hermes mcp test boardagent
 ```
@@ -49,12 +48,12 @@ mcp_servers:
   boardagent:
     command: C:\path\to\boardagent-mcp.exe
     args: []
-    type: stdio
 ```
 
 ### Claude Desktop
 
-Open (or create) the file `claude_desktop_config.json` and add:
+Open (or create) the file `claude_desktop_config.json` — on Windows it
+lives at `%APPDATA%\Claude\claude_desktop_config.json` — and add:
 
 ```json
 {
@@ -92,10 +91,13 @@ Restart Cursor after saving.
 The simplest check: open your AI tool and ask it to "list my BoardAgent
 tasks." If it can, the connection works.
 
-You can also check from a terminal:
+You can also check from a terminal — this sends the two handshake
+messages (initialize, then tools/list) and should print the seven tools:
 
 ```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | boardagent-mcp
+printf '%s\n%s\n' \
+'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' \
+'{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | boardagent-mcp
 ```
 
 You should see seven tools listed:

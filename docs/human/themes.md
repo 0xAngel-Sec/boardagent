@@ -14,10 +14,10 @@ text editor.
    path is `~/.boardagent/themes/`.
 2. Put a theme file in that folder (see the format below).
 3. Open BoardAgent, go to the **Settings** tab, and your theme appears in
-   the theme list automatically.
+   the theme list.
 
-No restart needed — the app reads the folder every time you open
-Settings.
+Themes are read when the app starts, so **restart the app** after adding
+a theme file.
 
 ## File format
 

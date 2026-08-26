@@ -76,11 +76,7 @@ To build them yourself (if you have Python installed):
 python scripts/build_exes.py
 ```
 
-Build scripts are provided as examples:
-
-- `scripts/build_server_exe.bat`
-- `scripts/build_tui_exe.bat`
-- `scripts/build_mcp_exe.bat`
+That one script builds all three programs.
 
 ## A note on durability
 

@@ -1,7 +1,9 @@
 openapi: 3.1.0
 info:
   title: BoardAgent API
-  description: Agent-first local task manager REST API.
+  description: 'BoardAgent local task manager API. All endpoints except /healthz require
+    the X-API-Key header (roles: read < write < admin). See docs/agent/rest_api.md
+    for the full error table.'
   version: 0.1.0
 paths:
   /healthz:
@@ -22,7 +24,7 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -41,13 +43,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: &id001
+            description: Missing or invalid API key
+        '403':
+          description: &id002
+            description: Insufficient role or not the owner
+        '404':
+          description: &id003
+            description: Task or key not found
+        '409':
+          description: &id004
+            description: Already claimed / already done
     put:
       summary: Put Settings
       operationId: put_settings_settings_put
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -72,6 +86,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /keys:
     get:
       summary: List Keys
@@ -79,7 +101,7 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -101,13 +123,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
     post:
       summary: Create Key
       operationId: create_key_keys_post
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -132,6 +162,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /keys/{key}:
     delete:
       summary: Delete Key
@@ -145,7 +183,7 @@ paths:
           title: Key
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -160,6 +198,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /tasks:
     post:
       summary: Create Task
@@ -167,7 +213,7 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -192,6 +238,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
     get:
       summary: List Tasks
       operationId: list_tasks_tasks_get
@@ -240,7 +294,7 @@ paths:
           title: Offset
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -259,6 +313,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /tasks/{task_id}:
     get:
       summary: Get Task
@@ -272,7 +334,7 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -291,6 +353,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
     patch:
       summary: Update Task
       operationId: update_task_tasks__task_id__patch
@@ -303,7 +373,7 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -328,6 +398,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
     delete:
       summary: Delete Task
       operationId: delete_task_tasks__task_id__delete
@@ -340,7 +418,7 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -355,6 +433,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /tasks/{task_id}/claim:
     post:
       summary: Claim Task
@@ -368,7 +454,7 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -393,6 +479,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /tasks/{task_id}/complete:
     post:
       summary: Complete Task
@@ -406,7 +500,7 @@ paths:
           title: Task Id
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -431,6 +525,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /tasks/schema/priority:
     get:
       summary: Priority Values
@@ -438,7 +540,7 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -460,6 +562,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
   /tasks/schema/status:
     get:
       summary: Status Values
@@ -467,7 +577,7 @@ paths:
       parameters:
       - name: x-api-key
         in: header
-        required: false
+        required: true
         schema:
           anyOf:
           - type: string
@@ -489,6 +599,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: *id001
+        '403':
+          description: *id002
+        '404':
+          description: *id003
+        '409':
+          description: *id004
 components:
   schemas:
     ApiKey:

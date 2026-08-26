@@ -169,6 +169,14 @@ class TaskService:
         def val(field: str) -> Any:
             return getattr(update, field) if field in sent else _UNSET
 
+        # List/dict fields must never store JSON null (breaks the response
+        # model). Explicit null on them means "clear" — same as []/{}.
+        def list_val(field: str) -> Any:
+            if field not in sent:
+                return _UNSET
+            value = getattr(update, field)
+            return value if value is not None else []
+
         metadata = _UNSET
         if "metadata" in sent:
             if update.metadata is not None and update.agent_id:
@@ -207,13 +215,13 @@ class TaskService:
             metadata=metadata,
             now=self._now(),
             clear_owner=clear_owner,
-            tags=val("tags"),
+            tags=list_val("tags"),
             estimate=val("estimate"),
-            custom_fields=val("custom_fields"),
-            links=val("links"),
+            custom_fields=list_val("custom_fields"),
+            links=list_val("links"),
             acceptance_criteria=val("acceptance_criteria"),
-            dependencies=val("dependencies"),
-            notes=val("notes"),
+            dependencies=list_val("dependencies"),
+            notes=list_val("notes"),
         )
 
     def delete_task(self, task_id: int) -> bool:

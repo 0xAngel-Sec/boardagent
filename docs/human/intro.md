@@ -25,8 +25,9 @@ Press **Tab** to switch between the two tabs.
    `boardagent-server`
 2. Open the task board:
    `boardagent`
-3. Press **c** to create your first task. Fill in a title, press Enter,
-   and you have a task on the board.
+3. Press **c** to create your first task. Fill in a title, then activate
+   the **Create** button (Enter or Space on it) — and you have a task on
+   the board.
 
 That's it. You now have a working task manager.
 
@@ -35,7 +36,7 @@ That's it. You now have a working task manager.
 You never need the mouse. Here are the keys you will use most:
 
 - **Arrow keys** — move up and down the task list.
-- **Space** — open or select a task.
+- **Space** — select a task (its details appear in the right panel).
 - **Enter** — activate the highlighted button or item.
 - **c** — create a new task.
 - **e** — edit the selected task.
@@ -44,7 +45,7 @@ You never need the mouse. Here are the keys you will use most:
 - **t** — complete the selected task.
 - **r** — refresh the list from the server.
 - **a** — toggle AI mode (see below).
-- **Escape** — close a dialog or go back.
+- **Escape** — close a dialog (on the main screen: quit).
 - **q** — quit.
 
 The mouse works too — click to select, scroll to move — but the keyboard
@@ -83,8 +84,22 @@ matter when agents are working alongside you:
 - **Agent** — which agent (if any) has claimed the task.
 - **Metadata** — extra fields agents attach, shown as key = value pairs.
 
+Note: the **Due** column is hidden in AI mode — the extra agent columns
+take its place.
+
 Turn AI mode on when you want to see what the agents are doing. Turn it
 off for a clean, human-focused view. The choice is saved across restarts.
+
+## API keys (for letting agents in)
+
+If you want an AI tool to read or write your board, it needs an API key.
+Create one in **Settings → API Keys**. Three levels:
+
+- **read** — can only look at tasks.
+- **write** — can create, edit, claim, and complete tasks.
+- **admin** — everything, including deleting tasks and keys.
+
+Start with **read** for anything you are unsure about.
 
 ## Where your data lives
 

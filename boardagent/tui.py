@@ -470,7 +470,11 @@ class ConfirmScreen(Screen[bool]):
     BINDINGS = [
         ("left,up", "app.focus_previous", "Previous"),
         ("right,down", "app.focus_next", "Next"),
+        ("escape", "dismiss_no", "Cancel"),
     ]
+
+    def action_dismiss_no(self) -> None:
+        self.dismiss(False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "yes")
@@ -1458,12 +1462,18 @@ class ArrowNavScreen(Screen):
     Up/Down move focus between fields; Tab still works as a fallback.
     When a Select overlay is open, the overlay handles up/down itself
     (option navigation) before these bindings are reached.
+    Escape dismisses the modal (the app-level Escape→quit is shadowed
+    while a modal is up, so a stray Escape can't kill the app mid-form).
     """
 
     BINDINGS = [
         ("up", "app.focus_previous", "Previous"),
         ("down", "app.focus_next", "Next"),
+        ("escape", "dismiss_modal", "Cancel"),
     ]
+
+    def action_dismiss_modal(self) -> None:
+        self.app.pop_screen()
 
 
 class CreateKeyScreen(ArrowNavScreen):

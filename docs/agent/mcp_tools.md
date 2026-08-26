@@ -73,7 +73,7 @@ Failures return `isError: true` with JSON text:
 {"error": "message", "code": "already_claimed|not_owner|invalid_transition|not_found|boardagent_error|internal|unknown_tool"}
 ```
 
-Check `isError` — never string-parse success. `internal` = server bug, retry later.
+Check `isError` — never string-parse success. `internal` = server bug, retry later. `boardagent_error` is a catch-all that also covers auth/role failures (invalid API key, insufficient permissions, MCP disabled) — distinct from `internal`.
 
 ## Agent conventions
 
