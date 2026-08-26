@@ -96,9 +96,8 @@ select "plasma."
 
 ## Built-in themes
 
-BoardAgent comes with 12 themes already installed: amber, matrix,
+BoardAgent comes with 13 themes already installed: amber, matrix,
 midnight, gruv, synth, rose, neon, violet, ember, ocean, mono (black and
-white), and graphite (black and dark grey). They appear in the same
-Settings list. You can use them as-is, or copy one into your themes
-folder and change the colors to
-make your own.
+white), graphite (black and dark grey), and dracula (blood red on black).
+They appear in the same Settings list. You can use them as-is, or copy
+one into your themes folder and change the colors to make your own.
