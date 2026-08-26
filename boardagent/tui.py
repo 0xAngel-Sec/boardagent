@@ -564,6 +564,16 @@ class BoardAgentApp(App):
                     if k.startswith("priority-")
                 }
             )
+            # Footer: Textual's default footer variables are a dim blue
+            # (#0178D4) no matter the theme, so the key hints render almost
+            # unreadable on dark themes like matrix. Derive the footer from
+            # the theme's own tokens so the keybinds stay bright.
+            variables["footer-background"] = colors.get("background", "#0a0a0a")
+            variables["footer-foreground"] = colors.get("foreground", "#ffb000")
+            variables["footer-key-background"] = colors.get("secondary", "#806000")
+            variables["footer-key-foreground"] = colors.get("foreground", "#ffb000")
+            variables["footer-description-foreground"] = colors.get("foreground", "#ffb000")
+            variables["footer-description-background"] = colors.get("background", "#0a0a0a")
             theme = Theme(
                 name=name,
                 primary=colors.get("primary", "#ffbf00"),
