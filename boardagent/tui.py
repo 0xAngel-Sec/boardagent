@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 from rich.text import Text
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.reactive import reactive
 from textual.screen import Screen
@@ -27,6 +28,7 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
+from textual.widgets._select import SelectCurrent, SelectOverlay
 
 from . import __version__
 from .config import (
@@ -137,11 +139,91 @@ def _api_headers() -> dict[str, str]:
     return {API_KEY_HEADER: _load_console_key()}
 
 
-def _apply_opacity(opacity: int) -> None:
-    """Apply window opacity to the console window (Windows only).
+def _find_windows_terminal_window() -> int | None:
+    """Find the Windows Terminal top-level window hosting this process.
 
-    Uses SetLayeredWindowAttributes with LWA_ALPHA on the console window
-    handle. Requires WS_EX_LAYERED on the window first.
+    When a console app runs inside Windows Terminal (ConPTY), GetConsoleWindow()
+    returns a hidden pseudo-console that cannot be made translucent. Walk the
+    parent process chain up to WindowsTerminal.exe and return its visible
+    top-level window handle.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32 = ctypes.windll.user32
+
+        TH32CS_SNAPPROCESS = 0x00000002
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.POINTER(wintypes.ULONG)),
+                ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", wintypes.DWORD),
+                ("szExeFile", ctypes.c_wchar * 260),
+            ]
+
+        def get_parent(pid: int) -> tuple[int, str] | None:
+            snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if snap == -1:
+                return None
+            try:
+                entry = PROCESSENTRY32W()
+                entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+                if not kernel32.Process32FirstW(snap, ctypes.byref(entry)):
+                    return None
+                while True:
+                    if entry.th32ProcessID == pid:
+                        return entry.th32ParentProcessID, entry.szExeFile
+                    if not kernel32.Process32NextW(snap, ctypes.byref(entry)):
+                        return None
+            finally:
+                kernel32.CloseHandle(snap)
+
+        pid = ctypes.windll.kernel32.GetCurrentProcessId()
+        for _ in range(15):
+            info = get_parent(pid)
+            if not info:
+                return None
+            ppid, exe = info
+            if exe.lower() == "windowsterminal.exe":
+                EnumWindows = user32.EnumWindows
+                GetWindowThreadProcessId = user32.GetWindowThreadProcessId
+                IsWindowVisible = user32.IsWindowVisible
+                EnumWindowsProc = ctypes.WINFUNCTYPE(
+                    wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+                )
+                found: list[int] = []
+
+                def cb(hwnd, lparam):
+                    wpid = wintypes.DWORD()
+                    GetWindowThreadProcessId(hwnd, ctypes.byref(wpid))
+                    if wpid.value == ppid and IsWindowVisible(hwnd):
+                        found.append(hwnd)
+                    return True
+
+                EnumWindows(EnumWindowsProc(cb), 0)
+                return found[0] if found else None
+            pid = ppid
+        return None
+    except Exception:
+        return None
+
+
+def _apply_opacity(opacity: int) -> None:
+    """Apply window opacity to the terminal window (Windows only).
+
+    Uses SetLayeredWindowAttributes with LWA_ALPHA. Under Windows Terminal the
+    console window is a hidden ConPTY, so the Windows Terminal window itself is
+    targeted (found by walking the parent process chain); otherwise the classic
+    console window is used.
     """
     if os.name != "nt":
         return
@@ -152,7 +234,9 @@ def _apply_opacity(opacity: int) -> None:
         WS_EX_LAYERED = 0x00080000
         LWA_ALPHA = 0x2
 
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        hwnd = _find_windows_terminal_window()
+        if not hwnd:
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
         if not hwnd:
             return
         user32 = ctypes.windll.user32
@@ -212,6 +296,31 @@ class TaskTable(DataTable):
         self.zebra_stripes = True
 
 
+class SettingsSelectOverlay(SelectOverlay):
+    """Select overlay where SPACE selects (like enter) and type-to-search is off.
+
+    Textual's stock overlay only binds enter to select; space is swallowed by
+    type-to-search. This makes the dropdown fully keyboard-coherent with the
+    rest of the TUI (space opens, space/enter selects, arrows move, escape
+    dismisses).
+    """
+
+    BINDINGS = [
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("end", "last", "Last", show=False),
+        Binding("enter", "select", "Select", show=False),
+        Binding("escape", "dismiss", "Dismiss menu"),
+        Binding("home", "first", "First", show=False),
+        Binding("pagedown", "page_down", "Page Down", show=False),
+        Binding("pageup", "page_up", "Page Up", show=False),
+        Binding("space", "select", "Select"),
+        Binding("up", "cursor_up", "Up", show=False),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__(type_to_search=False)
+
+
 class SettingsSelect(Select, inherit_bindings=False):
     """Select that only opens its overlay on SPACE.
 
@@ -225,6 +334,10 @@ class SettingsSelect(Select, inherit_bindings=False):
     BINDINGS = [
         ("space", "show_overlay", "Select"),
     ]
+
+    def compose(self) -> ComposeResult:
+        yield SelectCurrent(self.prompt)
+        yield SettingsSelectOverlay().data_bind(compact=Select.compact)
 
 
 class ConfirmScreen(Screen[bool]):
@@ -524,11 +637,16 @@ class BoardAgentApp(App):
         for action, key in self.keybinds.items():
             val = Static(key, id=f"kb-val-{action}", classes="kb-val")
             val.can_focus = True
+            change = Button("Change", id=f"kb-{action}")
+            # Keyboard users activate a keybind with enter/space on the value;
+            # the Change button is a mouse affordance only. Keeping it
+            # focusable makes arrow navigation cost two presses per row.
+            change.can_focus = False
             rows.append(
                 Horizontal(
                     Label(f"{ACTION_LABELS.get(action, action)}", classes="settings-label"),
                     val,
-                    Button("Change", id=f"kb-{action}"),
+                    change,
                     classes="kb-row",
                 )
             )
