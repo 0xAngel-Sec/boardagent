@@ -5,7 +5,17 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .config import db_path
-from .models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskUpdate
+from .models import (
+    DEFAULT_AGENT_FIELDS,
+    AgentCreate,
+    AgentUpdate,
+    Priority,
+    Status,
+    TaskClaim,
+    TaskComplete,
+    TaskCreate,
+    TaskUpdate,
+)
 from .store import TaskStore
 
 
@@ -151,3 +161,45 @@ class TaskService:
             now=self._now(),
         )
         return updated  # type: ignore[return-value]
+
+    # ---- agents -----------------------------------------------------------
+
+    def create_agent(self, create: AgentCreate) -> dict[str, Any]:
+        if self.store.get_agent_by_name(create.name):
+            raise BoardAgentError(f"agent '{create.name}' already exists")
+        # Merge the default fields under the user's custom fields so every
+        # agent starts with the standard set (role, model, ...) and can
+        # extend it with their own.
+        fields = {**DEFAULT_AGENT_FIELDS, **create.fields}
+        return self.store.create_agent(
+            name=create.name,
+            kind=create.kind.value,
+            description=create.description,
+            fields=fields,
+            now=self._now(),
+        )
+
+    def get_agent(self, agent_id: int) -> dict[str, Any] | None:
+        return self.store.get_agent(agent_id)
+
+    def list_agents(self) -> list[dict[str, Any]]:
+        return self.store.list_agents()
+
+    def update_agent(self, agent_id: int, update: AgentUpdate) -> dict[str, Any] | None:
+        existing = self.store.get_agent(agent_id)
+        if existing is None:
+            return None
+        if update.name and update.name != existing["name"]:
+            if self.store.get_agent_by_name(update.name):
+                raise BoardAgentError(f"agent '{update.name}' already exists")
+        return self.store.update_agent(
+            agent_id=agent_id,
+            name=update.name,
+            kind=update.kind.value if update.kind else None,
+            description=update.description,
+            fields=update.fields,
+            now=self._now(),
+        )
+
+    def delete_agent(self, agent_id: int) -> bool:
+        return self.store.delete_agent(agent_id)

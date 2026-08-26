@@ -27,7 +27,16 @@ from .config import (
     load_api_keys,
     load_server_settings,
 )
-from .models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskUpdate
+from .models import (
+    AgentCreate,
+    AgentUpdate,
+    Priority,
+    Status,
+    TaskClaim,
+    TaskComplete,
+    TaskCreate,
+    TaskUpdate,
+)
 from .service import (
     AlreadyClaimedError,
     InvalidTransitionError,
@@ -153,6 +162,49 @@ TOOLS = [
             "required": ["id", "agent_id"],
         },
     ),
+    _tool(
+        "boardagent_list_agents",
+        "List all registered agents (AI and user) with their descriptions and fields. Requires read role.",
+        {"type": "object", "properties": {}},
+    ),
+    _tool(
+        "boardagent_create_agent",
+        "Register an agent. kind is 'ai' or 'user'. fields is a dict of custom field name -> default value; the standard fields (role, model, system_prompt, temperature, max_tokens) are added automatically. Requires write role.",
+        {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Unique agent name"},
+                "kind": {"type": "string", "enum": ["ai", "user"], "default": "ai"},
+                "description": {"type": "string"},
+                "fields": {"type": "object", "description": "Custom fields: name -> default value"},
+            },
+            "required": ["name"],
+        },
+    ),
+    _tool(
+        "boardagent_update_agent",
+        "Update an agent's name, kind, description, or fields. Requires write role.",
+        {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "name": {"type": "string"},
+                "kind": {"type": "string", "enum": ["ai", "user"]},
+                "description": {"type": "string"},
+                "fields": {"type": "object"},
+            },
+            "required": ["id"],
+        },
+    ),
+    _tool(
+        "boardagent_delete_agent",
+        "Delete an agent by id. Requires admin role.",
+        {
+            "type": "object",
+            "properties": {"id": {"type": "integer"}},
+            "required": ["id"],
+        },
+    ),
 ]
 
 # Tool name -> minimum role required
@@ -164,6 +216,10 @@ TOOL_ROLES: dict[str, str] = {
     "boardagent_delete_task": ROLE_ADMIN,
     "boardagent_claim_task": ROLE_WRITE,
     "boardagent_complete_task": ROLE_WRITE,
+    "boardagent_list_agents": ROLE_READ,
+    "boardagent_create_agent": ROLE_WRITE,
+    "boardagent_update_agent": ROLE_WRITE,
+    "boardagent_delete_agent": ROLE_ADMIN,
 }
 
 
@@ -259,6 +315,31 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     args["id"], TaskComplete(agent_id=args["agent_id"])
                 )
                 text = _to_json(result)
+
+            elif name == "boardagent_list_agents":
+                text = _to_json({"agents": svc.list_agents()})
+
+            elif name == "boardagent_create_agent":
+                create = AgentCreate(
+                    name=args["name"],
+                    kind=args.get("kind", "ai"),
+                    description=args.get("description"),
+                    fields=args.get("fields") or {},
+                )
+                text = _to_json(svc.create_agent(create))
+
+            elif name == "boardagent_update_agent":
+                update = AgentUpdate(
+                    name=args.get("name"),
+                    kind=args.get("kind"),
+                    description=args.get("description"),
+                    fields=args.get("fields"),
+                )
+                result = svc.update_agent(args["id"], update)
+                text = _to_json(result if result else {"error": "agent not found"})
+
+            elif name == "boardagent_delete_agent":
+                text = json.dumps({"deleted": svc.delete_agent(args["id"])})
 
             else:
                 text = json.dumps({"error": f"unknown tool {name}"})

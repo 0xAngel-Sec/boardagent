@@ -22,6 +22,9 @@ from .config import (
     save_server_settings,
 )
 from .models import (
+    Agent,
+    AgentCreate,
+    AgentUpdate,
     ApiKey,
     ApiKeyCreate,
     Healthz,
@@ -206,6 +209,50 @@ def create_app(service: TaskService | None = None) -> FastAPI:
     @app.get("/tasks/schema/status")
     async def status_values(_: str = Depends(require_read)) -> list[str]:
         return [s.value for s in Status]
+
+    # ---- agents -----------------------------------------------------------
+
+    @app.get("/agents", response_model=list[Agent])
+    async def list_agents(_: str = Depends(require_read)) -> list[dict[str, Any]]:
+        return svc.list_agents()
+
+    @app.post("/agents", response_model=Agent, status_code=201)
+    async def create_agent(
+        create: AgentCreate, _: str = Depends(require_write)
+    ) -> dict[str, Any]:
+        try:
+            return svc.create_agent(create)
+        except BoardAgentError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/agents/{agent_id}", response_model=Agent)
+    async def get_agent(
+        agent_id: int, _: str = Depends(require_read)
+    ) -> dict[str, Any]:
+        agent = svc.get_agent(agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        return agent
+
+    @app.patch("/agents/{agent_id}", response_model=Agent)
+    async def update_agent(
+        agent_id: int, update: AgentUpdate, _: str = Depends(require_write)
+    ) -> dict[str, Any]:
+        try:
+            agent = svc.update_agent(agent_id, update)
+        except BoardAgentError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if agent is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        return agent
+
+    @app.delete("/agents/{agent_id}", status_code=204)
+    async def delete_agent(
+        agent_id: int, _: str = Depends(require_admin)
+    ) -> JSONResponse:
+        if not svc.delete_agent(agent_id):
+            raise HTTPException(status_code=404, detail="agent not found")
+        return JSONResponse(status_code=204, content={})
 
     return app
 

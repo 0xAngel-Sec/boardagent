@@ -53,6 +53,19 @@ class TaskStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    kind TEXT NOT NULL DEFAULT 'ai',
+                    description TEXT,
+                    fields TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -178,6 +191,102 @@ class TaskStore:
         cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
         return cur.rowcount > 0
+
+    # ---- agents -----------------------------------------------------------
+
+    def create_agent(
+        self,
+        name: str,
+        kind: str,
+        description: str | None,
+        fields: dict[str, str],
+        now: str,
+    ) -> dict[str, Any]:
+        conn = self._connection()
+        cur = conn.execute(
+            """
+            INSERT INTO agents (name, kind, description, fields, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                name,
+                kind,
+                description,
+                json.dumps(fields, ensure_ascii=False),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        return self.get_agent(cur.lastrowid)  # type: ignore[return-value]
+
+    def get_agent(self, agent_id: int) -> dict[str, Any] | None:
+        conn = self._connection()
+        row = conn.execute(
+            "SELECT * FROM agents WHERE id = ?", (agent_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._agent_row_to_dict(row)
+
+    def get_agent_by_name(self, name: str) -> dict[str, Any] | None:
+        conn = self._connection()
+        row = conn.execute(
+            "SELECT * FROM agents WHERE name = ?", (name,)
+        ).fetchone()
+        if row is None:
+            return None
+        return self._agent_row_to_dict(row)
+
+    def list_agents(self) -> list[dict[str, Any]]:
+        conn = self._connection()
+        rows = conn.execute("SELECT * FROM agents ORDER BY name").fetchall()
+        return [self._agent_row_to_dict(row) for row in rows]
+
+    def update_agent(
+        self,
+        agent_id: int,
+        name: str | None,
+        kind: str | None,
+        description: str | None,
+        fields: dict[str, str] | None,
+        now: str,
+    ) -> dict[str, Any] | None:
+        conn = self._connection()
+        existing = self.get_agent(agent_id)
+        if existing is None:
+            return None
+        conn.execute(
+            """
+            UPDATE agents
+            SET name = ?, kind = ?, description = ?, fields = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                name if name is not None else existing["name"],
+                kind if kind is not None else existing["kind"],
+                description if description is not None else existing["description"],
+                json.dumps(
+                    fields if fields is not None else existing["fields"],
+                    ensure_ascii=False,
+                ),
+                now,
+                agent_id,
+            ),
+        )
+        conn.commit()
+        return self.get_agent(agent_id)
+
+    def delete_agent(self, agent_id: int) -> bool:
+        conn = self._connection()
+        cur = conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+    def _agent_row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
+        d = dict(row)
+        d["fields"] = json.loads(d.get("fields") or "{}")
+        return d
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)

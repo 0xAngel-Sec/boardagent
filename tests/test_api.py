@@ -295,3 +295,80 @@ class TestPriorityColor:
             r = client.post("/tasks", json={"title": f"c-{color}", "priority": color}, headers=_auth(keys_file))
             assert r.status_code == 201, color
             assert r.json()["priority"] == color
+
+
+class TestAgents:
+    def test_create_agent_defaults_and_custom_fields(self, client, keys_file):
+        r = client.post(
+            "/agents",
+            json={
+                "name": "angel",
+                "kind": "ai",
+                "description": "the one above all",
+                "fields": {"favorite_color": "green"},
+            },
+            headers=_auth(keys_file),
+        )
+        assert r.status_code == 201
+        agent = r.json()
+        assert agent["name"] == "angel"
+        assert agent["kind"] == "ai"
+        assert agent["description"] == "the one above all"
+        # default fields merged in
+        assert agent["fields"]["model"] == ""
+        assert agent["fields"]["temperature"] == "0.7"
+        assert agent["fields"]["max_tokens"] == "4096"
+        # custom field preserved
+        assert agent["fields"]["favorite_color"] == "green"
+
+    def test_create_user_agent(self, client, keys_file):
+        r = client.post(
+            "/agents",
+            json={"name": "m", "kind": "user", "description": "the human"},
+            headers=_auth(keys_file),
+        )
+        assert r.status_code == 201
+        assert r.json()["kind"] == "user"
+
+    def test_duplicate_agent_name_conflict(self, client, keys_file):
+        r = client.post("/agents", json={"name": "dup"}, headers=_auth(keys_file))
+        assert r.status_code == 201
+        r = client.post("/agents", json={"name": "dup"}, headers=_auth(keys_file))
+        assert r.status_code == 409
+
+    def test_list_and_update_agent(self, client, keys_file):
+        r = client.post(
+            "/agents",
+            json={"name": "kimi", "kind": "ai", "fields": {"model": "kimi-k2.7"}},
+            headers=_auth(keys_file),
+        )
+        aid = r.json()["id"]
+
+        r = client.get("/agents", headers=_auth(keys_file))
+        assert r.status_code == 200
+        assert any(a["id"] == aid for a in r.json())
+
+        r = client.patch(
+            f"/agents/{aid}",
+            json={"description": "coder", "fields": {"model": "kimi-k2.7-code"}},
+            headers=_auth(keys_file),
+        )
+        assert r.status_code == 200
+        assert r.json()["description"] == "coder"
+        assert r.json()["fields"]["model"] == "kimi-k2.7-code"
+
+    def test_delete_agent(self, client, keys_file):
+        r = client.post("/agents", json={"name": "temp"}, headers=_auth(keys_file))
+        aid = r.json()["id"]
+        r = client.delete(f"/agents/{aid}", headers=_auth(keys_file))
+        assert r.status_code == 204
+        r = client.get(f"/agents/{aid}", headers=_auth(keys_file))
+        assert r.status_code == 404
+
+    def test_agent_requires_write(self, client, keys_file):
+        r = client.post(
+            "/keys", json={"name": "reader", "role": "read"}, headers=_auth(keys_file)
+        )
+        read_key = r.json()["key"]
+        r = client.post("/agents", json={"name": "x"}, headers=_auth(read_key))
+        assert r.status_code == 403
