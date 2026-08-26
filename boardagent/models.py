@@ -32,52 +32,6 @@ class Role(str, Enum):
     ADMIN = "admin"
 
 
-class AgentKind(str, Enum):
-    """Whether an agent is an AI or a human user."""
-
-    AI = "ai"
-    USER = "user"
-
-
-# Default fields every agent gets on creation. Users can override the
-# values and add their own custom fields (name -> default value).
-DEFAULT_AGENT_FIELDS: dict[str, str] = {
-    "role": "",
-    "model": "",
-    "system_prompt": "",
-    "temperature": "0.7",
-    "max_tokens": "4096",
-}
-
-
-class AgentBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    kind: AgentKind = AgentKind.AI
-    description: str | None = None
-    fields: dict[str, str] = Field(default_factory=dict)
-
-
-class AgentCreate(AgentBase):
-    pass
-
-
-class AgentUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    kind: AgentKind | None = None
-    description: str | None = None
-    fields: dict[str, str] | None = None
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class Agent(AgentBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class ApiKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     role: Role = Role.READ
@@ -103,6 +57,9 @@ class TaskBase(BaseModel):
     priority: Priority = Priority.WHITE
     project: str | None = Field(default=None, max_length=100)
     status: Status = Status.TODO
+    tags: list[str] = Field(default_factory=list)
+    estimate: str | None = Field(default=None, max_length=50)
+    custom_fields: dict[str, str] = Field(default_factory=dict)
 
 
 class TaskCreate(TaskBase):
@@ -117,6 +74,9 @@ class TaskUpdate(BaseModel):
     priority: Priority | None = None
     project: str | None = Field(default=None, max_length=100)
     status: Status | None = None
+    tags: list[str] | None = None
+    estimate: str | None = Field(default=None, max_length=50)
+    custom_fields: dict[str, str] | None = None
     metadata: dict[str, Any] | None = None
     agent_id: str | None = Field(default=None, max_length=100)
 

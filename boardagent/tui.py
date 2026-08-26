@@ -567,7 +567,6 @@ class BoardAgentApp(App):
         self.active_theme = self.settings.get("theme", "amber")
         self.server_settings = load_server_settings()
         self.api_keys: list[dict[str, Any]] = []
-        self.agents: list[dict[str, Any]] = []
 
     def _rebuild_bindings(self) -> None:
         """Rebuild the key dispatch map from self.keybinds.
@@ -687,17 +686,6 @@ class BoardAgentApp(App):
                         ),
                         id="detail-panel",
                     )
-            with TabPane("Agents", id="agents"):
-                yield VerticalScroll(
-                    Horizontal(
-                        Button("New Agent", id="agent-new"),
-                        Button("Edit Selected", id="agent-edit"),
-                        Button("Delete Selected", id="agent-delete"),
-                        classes="keys-actions",
-                    ),
-                    DataTable(id="agents-table", cursor_type="row"),
-                    id="agents-panel",
-                )
             with TabPane("Settings", id="settings"):
                 yield VerticalScroll(
                     Label("Theme", classes="settings-label"),
@@ -843,7 +831,7 @@ class BoardAgentApp(App):
                 table.remove_row(key)
 
         # (re)create columns only when the mode's column set changed
-        expected = 7 if self.ai_mode else 5
+        expected = 10 if self.ai_mode else 8
         if len(table.columns) != expected:
             # Removing columns drops the cell data of every existing row
             # (Textual keys cells by column), so rows must be rebuilt too —
@@ -853,9 +841,9 @@ class BoardAgentApp(App):
             for col in list(table.columns):
                 table.remove_column(getattr(col, "key", col))
             if self.ai_mode:
-                table.add_columns("ID", "Title", "Status", "Priority", "Project", "Agent", "Metadata")
+                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Status", "Priority", "Project", "Agent", "Metadata")
             else:
-                table.add_columns("Title", "Status", "Priority", "Project", "Due")
+                table.add_columns("Title", "Description", "Tags", "Estimate", "Status", "Priority", "Project", "Due")
 
         for t in self.tasks:
             key = str(t["id"])
@@ -863,11 +851,17 @@ class BoardAgentApp(App):
                 continue
             status = t.get("status", "todo")
             priority = t.get("priority", "white")
+            desc = (t.get("description") or "").replace("\n", " ")[:40]
+            tags = ", ".join(t.get("tags") or [])[:30]
+            estimate = t.get("estimate") or ""
             if self.ai_mode:
                 metadata = json.dumps(t.get("metadata", {}))
                 table.add_row(
                     str(t["id"]),
                     t["title"],
+                    desc,
+                    tags,
+                    estimate,
                     self._colored(status, f"status-{status}"),
                     self._colored(priority, f"priority-{priority}"),
                     t.get("project") or "",
@@ -884,6 +878,9 @@ class BoardAgentApp(App):
                         pass
                 table.add_row(
                     t["title"],
+                    desc,
+                    tags,
+                    estimate,
                     self._colored(status, f"status-{status}"),
                     self._colored(priority, f"priority-{priority}"),
                     t.get("project") or "",
@@ -899,7 +896,7 @@ class BoardAgentApp(App):
         _save_settings(self.settings)
 
     def action_switch_tab(self) -> None:
-        """Tab cycles Tasks -> Agents -> Settings -> Tasks."""
+        """Tab cycles Tasks -> Settings -> Tasks."""
         # Debounce: after a Select overlay dismisses, Textual can re-deliver
         # the same key event, firing this action twice and toggling back.
         import time
@@ -910,7 +907,7 @@ class BoardAgentApp(App):
         self._last_tab_switch = now
         try:
             tabs = self.query_one(TabbedContent)
-            order = ["tasks", "agents", "settings"]
+            order = ["tasks", "settings"]
             target = order[(order.index(tabs.active) + 1) % len(order)]
             tabs.active = target
             # Move focus into the target tab. If a widget in the hidden pane
@@ -918,8 +915,6 @@ class BoardAgentApp(App):
             # can re-activate the old pane.
             if target == "tasks":
                 self.query_one(TaskTable).focus()
-            elif target == "agents":
-                self.query_one("#agent-new").focus()
             else:
                 self.query_one("#theme-select").focus()
             self._update_footer_visibility()
@@ -927,10 +922,10 @@ class BoardAgentApp(App):
             pass
 
     def _update_footer_visibility(self) -> None:
-        """Hide the footer while on the Agents or Settings tabs.
+        """Hide the footer while on the Settings tab.
 
         The footer's key hints (q/r/a/c/e/d/l/t) only make sense on the
-        Tasks tab. Inside Agents/Settings it is noise, so it disappears.
+        Tasks tab. Inside Settings it is noise, so it disappears.
         """
         try:
             tabs = self.query_one(TabbedContent)
@@ -947,22 +942,13 @@ class BoardAgentApp(App):
         except Exception:
             return False
 
-    def _on_agents_tab(self) -> bool:
-        """True when the Agents tab is currently active."""
-        try:
-            tabs = self.query_one(TabbedContent)
-            return tabs.active == "agents"
-        except Exception:
-            return False
-
     def _guard_task_actions(self) -> bool:
         """Block task create/edit/delete/claim/complete outside the Tasks tab.
 
         Returning True means the caller should abort. Users only manage
-        tasks from the Tasks tab — acting from Agents/Settings would be
-        surprising.
+        tasks from the Tasks tab — acting from Settings would be surprising.
         """
-        if self._on_settings_tab() or self._on_agents_tab():
+        if self._on_settings_tab():
             self.notify("Switch to the Tasks tab to manage tasks.", severity="warning")
             return True
         return False
@@ -1098,8 +1084,18 @@ class BoardAgentApp(App):
         ]
         if task.get("due"):
             lines.append(f"Due: {task['due']}")
+        if task.get("estimate"):
+            lines.append(f"Estimate: {task['estimate']}")
+        tags = task.get("tags") or []
+        if tags:
+            lines.append(f"Tags: {', '.join(tags)}")
         if task.get("description"):
             lines.append(f"\n{task['description']}")
+        custom = task.get("custom_fields") or {}
+        if custom:
+            lines.append("\n[b]Custom fields[/b]")
+            for k, v in custom.items():
+                lines.append(f"{k}: {v}")
         if self.ai_mode and task.get("metadata"):
             lines.append("\n[b]Metadata[/b]")
             lines.append(json.dumps(task["metadata"], indent=2, default=str))
@@ -1133,84 +1129,6 @@ class BoardAgentApp(App):
         if task is None:
             return
         self._update_detail(task)
-
-    # ---- agents tab --------------------------------------------------------
-
-    async def refresh_agents_tab(self) -> None:
-        """Reload agents from the server into the table."""
-        try:
-            r = await asyncio.to_thread(
-                httpx.get, f"{_api_base()}/agents", headers=_api_headers(), timeout=5.0
-            )
-            r.raise_for_status()
-            self.agents = r.json()
-            self._render_agents_table()
-        except Exception as exc:
-            self.notify(f"Agents load failed: {exc}", severity="error")
-
-    def _render_agents_table(self) -> None:
-        table = self.query_one("#agents-table", DataTable)
-        if len(table.columns) != 4:
-            table.add_columns("Name", "Kind", "Description", "Fields")
-        # Preserve the selected agent across re-renders.
-        selected_id = None
-        if table.cursor_row is not None and table.row_count:
-            row = table.get_row_at(table.cursor_row)
-            if row:
-                selected_id = row[0]
-        for key in list(table.rows):
-            table.remove_row(key)
-        for a in self.agents:
-            fields = a.get("fields") or {}
-            table.add_row(
-                str(a.get("id", "")),
-                a.get("kind", "ai"),
-                (a.get("description") or "")[:60],
-                ", ".join(f"{k}={v}" for k, v in fields.items())[:60],
-                key=str(a.get("id", "")),
-            )
-        if selected_id is not None:
-            for idx in range(table.row_count):
-                row = table.get_row_at(idx)
-                if row and row[0] == selected_id:
-                    table.move_cursor(row=idx, column=0)
-                    break
-
-    def _selected_agent(self) -> dict[str, Any] | None:
-        table = self.query_one("#agents-table", DataTable)
-        if table.cursor_row is None or not table.row_count:
-            return None
-        row = table.get_row_at(table.cursor_row)
-        if not row:
-            return None
-        aid = row[0]
-        return next((a for a in self.agents if str(a.get("id")) == str(aid)), None)
-
-    async def _delete_selected_agent(self) -> None:
-        agent = self._selected_agent()
-        if agent is None:
-            self.notify("Select an agent first.", severity="warning")
-            return
-        self.push_screen(
-            ConfirmScreen(f"Delete agent '{agent['name']}'?"),
-            callback=lambda ok: asyncio.create_task(self._delete_agent(agent, ok)),
-        )
-
-    async def _delete_agent(self, agent: dict[str, Any], confirmed: bool) -> None:
-        if not confirmed:
-            return
-        try:
-            r = await asyncio.to_thread(
-                httpx.delete,
-                f"{_api_base()}/agents/{agent['id']}",
-                headers=_api_headers(),
-                timeout=5.0,
-            )
-            r.raise_for_status()
-            self.notify(f"Agent '{agent['name']}' deleted")
-            await self.refresh_agents_tab()
-        except Exception as exc:
-            self.notify(f"Delete agent failed: {exc}", severity="error")
 
     # ---- settings tab ------------------------------------------------------
 
@@ -1362,16 +1280,6 @@ class BoardAgentApp(App):
             self.push_screen(CreateKeyScreen())
         elif bid == "delete-key":
             await self._delete_selected_key()
-        elif bid == "agent-new":
-            self.push_screen(AgentEditScreen())
-        elif bid == "agent-edit":
-            agent = self._selected_agent()
-            if agent is None:
-                self.notify("Select an agent first.", severity="warning")
-            else:
-                self.push_screen(AgentEditScreen(agent))
-        elif bid == "agent-delete":
-            await self._delete_selected_agent()
         elif bid and bid.startswith("kb-") and not bid.startswith("kb-val-"):
             action = bid[3:]
             current = self.keybinds.get(action, "")
@@ -1507,8 +1415,6 @@ class BoardAgentApp(App):
         self._update_footer_visibility()
         if event.tab.id == "settings":
             asyncio.create_task(self.refresh_settings_tab())
-        elif event.tab.id == "agents":
-            asyncio.create_task(self.refresh_agents_tab())
 
 
 class ArrowNavScreen(Screen):
@@ -1585,19 +1491,12 @@ class CreateKeyScreen(ArrowNavScreen):
             self.app.notify(f"Create key failed: {exc}", severity="error")
 
 
-class AgentEditScreen(ArrowNavScreen):
-    """Modal to create or edit an agent (AI or user).
-
-    Fields: name, kind (ai/user), description, and a dynamic fields editor
-    (field name -> default value). The standard fields (role, model,
-    system_prompt, temperature, max_tokens) are pre-seeded on create; the
-    user can edit them or add their own.
-    """
+class CreateTaskScreen(ArrowNavScreen):
+    """Modal screen to add a task quickly."""
 
     CSS = """
-    AgentEditScreen { align: center middle; }
-    #dialog { width: 78; height: auto; border: solid $primary; padding: 1 2; }
-    #desc { height: 5; }
+    CreateTaskScreen { align: center middle; }
+    #dialog { width: 68; height: auto; border: solid $primary; padding: 1 2; }
     .field-row { height: 3; }
     .field-row > * { margin: 0 1; }
     .field-row Input { width: 1fr; }
@@ -1606,29 +1505,140 @@ class AgentEditScreen(ArrowNavScreen):
     #field-actions Button { margin: 0 1; }
     """
 
-    def __init__(self, agent: dict[str, Any] | None = None) -> None:
-        super().__init__()
-        self.agent = agent
-
     def compose(self) -> ComposeResult:
-        agent = self.agent or {}
-        fields = dict(agent.get("fields") or {})
         with Vertical(id="dialog"):
-            yield Label(f"[b]{'Edit' if agent else 'New'} Agent[/b]")
-            yield Label("Name", classes="settings-label")
-            yield Input(value=agent.get("name", ""), placeholder="e.g. angel", id="agent-name")
-            yield Label("Kind", classes="settings-label")
+            yield Label("[b]Create Task[/b]")
+            yield Input(placeholder="Title", id="title")
+            yield Input(placeholder="Project", id="project")
+            yield Label("Description", classes="settings-label")
+            yield TextArea("", id="task-desc")
+            yield Label("Tags (comma separated)", classes="settings-label")
+            yield Input(placeholder="e.g. urgent, backend", id="tags")
+            yield Label("Estimate", classes="settings-label")
+            yield Input(placeholder="e.g. 2h, 1d", id="estimate")
             yield SettingsSelect(
-                (("ai", "ai"), ("user", "user")),
-                value=agent.get("kind", "ai"),
-                id="agent-kind",
+                ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
+                value="white",
+                id="priority",
                 allow_blank=False,
             )
-            yield Label("Description", classes="settings-label")
-            yield TextArea(agent.get("description") or "", id="agent-desc")
-            yield Label("Fields (name = default value)", classes="settings-label")
+            yield Label("Custom fields (name = value)", classes="settings-label")
             with Vertical(id="field-list"):
-                for name, value in fields.items():
+                pass
+            with Horizontal(id="field-actions"):
+                yield Button("Add Field", id="field-add")
+                yield Button("Remove Field", id="field-remove")
+            yield Button("Create", id="create")
+            yield Button("Cancel", id="cancel")
+
+    def _field_row(self, name: str = "", value: str = "") -> Horizontal:
+        return Horizontal(
+            Input(value=name, placeholder="field name", classes="field-name"),
+            Input(value=value, placeholder="value", classes="field-value"),
+            classes="field-row",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.app.pop_screen()
+        elif event.button.id == "field-add":
+            self.query_one("#field-list").mount(self._field_row())
+            self.query_one("#field-list").query(Input).last.focus()
+        elif event.button.id == "field-remove":
+            rows = list(self.query_one("#field-list").query(".field-row"))
+            if not rows:
+                return
+            rows[-1].remove()
+        elif event.button.id == "create":
+            asyncio.create_task(self._create())
+
+    def _collect_custom_fields(self) -> dict[str, str]:
+        fields: dict[str, str] = {}
+        for row in self.query_one("#field-list").query(".field-row"):
+            inputs = row.query(Input)
+            fname = inputs[0].value.strip()
+            if fname:
+                fields[fname] = inputs[1].value
+        return fields
+
+    async def _create(self) -> None:
+        title = self.query_one("#title", Input).value
+        project = self.query_one("#project", Input).value
+        description = self.query_one("#task-desc", TextArea).text
+        priority = self.query_one("#priority", Select).value or "white"
+        tags = [t.strip() for t in self.query_one("#tags", Input).value.split(",") if t.strip()]
+        estimate = self.query_one("#estimate", Input).value.strip()
+        custom_fields = self._collect_custom_fields()
+        if not title:
+            self.app.notify("Title required", severity="error")
+            return
+        try:
+            r = await asyncio.to_thread(
+                httpx.post,
+                f"{_api_base()}/tasks",
+                json={
+                    "title": title,
+                    "project": project,
+                    "priority": priority,
+                    "description": description,
+                    "tags": tags,
+                    "estimate": estimate,
+                    "custom_fields": custom_fields,
+                },
+                headers=_api_headers(),
+                timeout=5.0,
+            )
+            r.raise_for_status()
+            self.app.notify("Task created")
+            await self.app.action_refresh()
+            self.app.pop_screen()
+        except Exception as exc:
+            self.app.notify(f"Create failed: {exc}", severity="error")
+
+
+class EditTaskScreen(ArrowNavScreen):
+    """Modal screen to edit a task's human fields."""
+
+    CSS = """
+    EditTaskScreen { align: center middle; }
+    #dialog { width: 68; height: auto; border: solid $primary; padding: 1 2; }
+    .field-row { height: 3; }
+    .field-row > * { margin: 0 1; }
+    .field-row Input { width: 1fr; }
+    .field-row Input:first-child { width: 30; }
+    #field-actions { height: 3; }
+    #field-actions Button { margin: 0 1; }
+    """
+
+    def __init__(self, task: dict[str, Any]) -> None:
+        super().__init__()
+        # NOTE: cannot be named self.task — Textual's Screen base class
+        # defines `task` as a read-only property (message pump bookkeeping).
+        self.task_data = task
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(f"[b]Edit #{self.task_data['id']}[/b]")
+            yield Input(value=self.task_data.get("title", ""), id="title")
+            yield Input(value=self.task_data.get("project") or "", id="project")
+            yield Label("Description", classes="settings-label")
+            yield TextArea(self.task_data.get("description") or "", id="task-desc")
+            yield Label("Tags (comma separated)", classes="settings-label")
+            yield Input(
+                value=", ".join(self.task_data.get("tags") or []),
+                id="tags",
+            )
+            yield Label("Estimate", classes="settings-label")
+            yield Input(value=self.task_data.get("estimate") or "", id="estimate")
+            yield SettingsSelect(
+                ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
+                value=self.task_data.get("priority", "white"),
+                id="priority",
+                allow_blank=False,
+            )
+            yield Label("Custom fields (name = value)", classes="settings-label")
+            with Vertical(id="field-list"):
+                for name, value in (self.task_data.get("custom_fields") or {}).items():
                     yield self._field_row(name, value)
             with Horizontal(id="field-actions"):
                 yield Button("Add Field", id="field-add")
@@ -1639,7 +1649,7 @@ class AgentEditScreen(ArrowNavScreen):
     def _field_row(self, name: str = "", value: str = "") -> Horizontal:
         return Horizontal(
             Input(value=name, placeholder="field name", classes="field-name"),
-            Input(value=value, placeholder="default value", classes="field-value"),
+            Input(value=value, placeholder="value", classes="field-value"),
             classes="field-row",
         )
 
@@ -1657,134 +1667,23 @@ class AgentEditScreen(ArrowNavScreen):
         elif event.button.id == "save":
             asyncio.create_task(self._save())
 
-    async def _save(self) -> None:
-        name = self.query_one("#agent-name", Input).value.strip()
-        if not name:
-            self.app.notify("Agent name required.", severity="error")
-            return
-        kind = str(self.query_one("#agent-kind", Select).value or "ai")
-        desc = self.query_one("#agent-desc", TextArea).text
+    def _collect_custom_fields(self) -> dict[str, str]:
         fields: dict[str, str] = {}
         for row in self.query_one("#field-list").query(".field-row"):
             inputs = row.query(Input)
             fname = inputs[0].value.strip()
             if fname:
                 fields[fname] = inputs[1].value
-        payload = {"name": name, "kind": kind, "description": desc, "fields": fields}
-        try:
-            if self.agent:
-                r = await asyncio.to_thread(
-                    httpx.patch,
-                    f"{_api_base()}/agents/{self.agent['id']}",
-                    json=payload,
-                    headers=_api_headers(),
-                    timeout=5.0,
-                )
-            else:
-                r = await asyncio.to_thread(
-                    httpx.post,
-                    f"{_api_base()}/agents",
-                    json=payload,
-                    headers=_api_headers(),
-                    timeout=5.0,
-                )
-            r.raise_for_status()
-            self.app.notify(f"Agent '{name}' saved")
-            await self.app.refresh_agents_tab()
-            self.app.pop_screen()
-        except Exception as exc:
-            self.app.notify(f"Save agent failed: {exc}", severity="error")
+        return fields
 
-
-class CreateTaskScreen(ArrowNavScreen):
-    """Modal screen to add a task quickly."""
-
-    CSS = """
-    CreateTaskScreen { align: center middle; }
-    #dialog { width: 60; height: auto; border: solid $primary; padding: 1 2; }
-    """
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            yield Label("[b]Create Task[/b]")
-            yield Input(placeholder="Title", id="title")
-            yield Input(placeholder="Project", id="project")
-            yield Label("Description", classes="settings-label")
-            yield TextArea("", id="task-desc")
-            yield SettingsSelect(
-                ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
-                value="white",
-                id="priority",
-                allow_blank=False,
-            )
-            yield Button("Create", id="create")
-            yield Button("Cancel", id="cancel")
-
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "cancel":
-            self.app.pop_screen()
-            return
+    async def _save(self) -> None:
         title = self.query_one("#title", Input).value
         project = self.query_one("#project", Input).value
         description = self.query_one("#task-desc", TextArea).text
         priority = self.query_one("#priority", Select).value or "white"
-        if not title:
-            self.app.notify("Title required", severity="error")
-            return
-        try:
-            r = await asyncio.to_thread(
-                httpx.post,
-                f"{_api_base()}/tasks",
-                json={"title": title, "project": project, "priority": priority, "description": description},
-                headers=_api_headers(),
-                timeout=5.0,
-            )
-            r.raise_for_status()
-            self.app.notify("Task created")
-            await self.app.action_refresh()
-            self.app.pop_screen()
-        except Exception as exc:
-            self.app.notify(f"Create failed: {exc}", severity="error")
-
-
-class EditTaskScreen(ArrowNavScreen):
-    """Modal screen to edit a task's human fields."""
-
-    CSS = """
-    EditTaskScreen { align: center middle; }
-    #dialog { width: 60; height: auto; border: solid $primary; padding: 1 2; }
-    """
-
-    def __init__(self, task: dict[str, Any]) -> None:
-        super().__init__()
-        # NOTE: cannot be named self.task — Textual's Screen base class
-        # defines `task` as a read-only property (message pump bookkeeping).
-        self.task_data = task
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="dialog"):
-            yield Label(f"[b]Edit #{self.task_data['id']}[/b]")
-            yield Input(value=self.task_data.get("title", ""), id="title")
-            yield Input(value=self.task_data.get("project") or "", id="project")
-            yield Label("Description", classes="settings-label")
-            yield TextArea(self.task_data.get("description") or "", id="task-desc")
-            yield SettingsSelect(
-                ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
-                value=self.task_data.get("priority", "white"),
-                id="priority",
-                allow_blank=False,
-            )
-            yield Button("Save", id="save")
-            yield Button("Cancel", id="cancel")
-
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "cancel":
-            self.app.pop_screen()
-            return
-        title = self.query_one("#title", Input).value
-        project = self.query_one("#project", Input).value
-        description = self.query_one("#task-desc", TextArea).text
-        priority = self.query_one("#priority", Select).value or "white"
+        tags = [t.strip() for t in self.query_one("#tags", Input).value.split(",") if t.strip()]
+        estimate = self.query_one("#estimate", Input).value.strip()
+        custom_fields = self._collect_custom_fields()
         if not title:
             self.app.notify("Title required", severity="error")
             return
@@ -1792,7 +1691,15 @@ class EditTaskScreen(ArrowNavScreen):
             r = await asyncio.to_thread(
                 httpx.patch,
                 f"{_api_base()}/tasks/{self.task_data['id']}",
-                json={"title": title, "project": project, "priority": priority, "description": description},
+                json={
+                    "title": title,
+                    "project": project,
+                    "priority": priority,
+                    "description": description,
+                    "tags": tags,
+                    "estimate": estimate,
+                    "custom_fields": custom_fields,
+                },
                 headers=_api_headers(),
                 timeout=5.0,
             )

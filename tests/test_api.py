@@ -297,78 +297,100 @@ class TestPriorityColor:
             assert r.json()["priority"] == color
 
 
-class TestAgents:
-    def test_create_agent_defaults_and_custom_fields(self, client, keys_file):
+class TestTaskFields:
+    def test_create_task_with_all_fields(self, client, keys_file):
         r = client.post(
-            "/agents",
+            "/tasks",
             json={
-                "name": "angel",
-                "kind": "ai",
-                "description": "the one above all",
-                "fields": {"favorite_color": "green"},
+                "title": "ship it",
+                "description": "do the thing",
+                "tags": ["urgent", "backend"],
+                "estimate": "2h",
+                "custom_fields": {"reviewer": "kimi", "ticket": "BA-42"},
             },
             headers=_auth(keys_file),
         )
         assert r.status_code == 201
-        agent = r.json()
-        assert agent["name"] == "angel"
-        assert agent["kind"] == "ai"
-        assert agent["description"] == "the one above all"
-        # default fields merged in
-        assert agent["fields"]["model"] == ""
-        assert agent["fields"]["temperature"] == "0.7"
-        assert agent["fields"]["max_tokens"] == "4096"
-        # custom field preserved
-        assert agent["fields"]["favorite_color"] == "green"
+        task = r.json()
+        assert task["description"] == "do the thing"
+        assert task["tags"] == ["urgent", "backend"]
+        assert task["estimate"] == "2h"
+        assert task["custom_fields"] == {"reviewer": "kimi", "ticket": "BA-42"}
 
-    def test_create_user_agent(self, client, keys_file):
-        r = client.post(
-            "/agents",
-            json={"name": "m", "kind": "user", "description": "the human"},
-            headers=_auth(keys_file),
-        )
+    def test_task_fields_default_empty(self, client, keys_file):
+        r = client.post("/tasks", json={"title": "bare"}, headers=_auth(keys_file))
         assert r.status_code == 201
-        assert r.json()["kind"] == "user"
+        task = r.json()
+        assert task["tags"] == []
+        assert task["estimate"] is None
+        assert task["custom_fields"] == {}
 
-    def test_duplicate_agent_name_conflict(self, client, keys_file):
-        r = client.post("/agents", json={"name": "dup"}, headers=_auth(keys_file))
-        assert r.status_code == 201
-        r = client.post("/agents", json={"name": "dup"}, headers=_auth(keys_file))
-        assert r.status_code == 409
-
-    def test_list_and_update_agent(self, client, keys_file):
-        r = client.post(
-            "/agents",
-            json={"name": "kimi", "kind": "ai", "fields": {"model": "kimi-k2.7"}},
-            headers=_auth(keys_file),
-        )
-        aid = r.json()["id"]
-
-        r = client.get("/agents", headers=_auth(keys_file))
-        assert r.status_code == 200
-        assert any(a["id"] == aid for a in r.json())
-
+    def test_update_task_fields(self, client, keys_file):
+        r = client.post("/tasks", json={"title": "t"}, headers=_auth(keys_file))
+        tid = r.json()["id"]
         r = client.patch(
-            f"/agents/{aid}",
-            json={"description": "coder", "fields": {"model": "kimi-k2.7-code"}},
+            f"/tasks/{tid}",
+            json={
+                "description": "updated",
+                "tags": ["a", "b"],
+                "estimate": "1d",
+                "custom_fields": {"x": "1"},
+            },
             headers=_auth(keys_file),
         )
         assert r.status_code == 200
-        assert r.json()["description"] == "coder"
-        assert r.json()["fields"]["model"] == "kimi-k2.7-code"
+        task = r.json()
+        assert task["description"] == "updated"
+        assert task["tags"] == ["a", "b"]
+        assert task["estimate"] == "1d"
+        assert task["custom_fields"] == {"x": "1"}
 
-    def test_delete_agent(self, client, keys_file):
-        r = client.post("/agents", json={"name": "temp"}, headers=_auth(keys_file))
-        aid = r.json()["id"]
-        r = client.delete(f"/agents/{aid}", headers=_auth(keys_file))
-        assert r.status_code == 204
-        r = client.get(f"/agents/{aid}", headers=_auth(keys_file))
-        assert r.status_code == 404
-
-    def test_agent_requires_write(self, client, keys_file):
+    def test_update_task_fields_partial(self, client, keys_file):
         r = client.post(
-            "/keys", json={"name": "reader", "role": "read"}, headers=_auth(keys_file)
+            "/tasks",
+            json={"title": "t", "tags": ["keep"], "estimate": "30m"},
+            headers=_auth(keys_file),
         )
-        read_key = r.json()["key"]
-        r = client.post("/agents", json={"name": "x"}, headers=_auth(read_key))
-        assert r.status_code == 403
+        tid = r.json()["id"]
+        r = client.patch(
+            f"/tasks/{tid}", json={"estimate": "1h"}, headers=_auth(keys_file)
+        )
+        assert r.status_code == 200
+        task = r.json()
+        # untouched fields survive a partial update
+        assert task["tags"] == ["keep"]
+        assert task["estimate"] == "1h"
+
+    def test_clear_task_fields(self, client, keys_file):
+        r = client.post(
+            "/tasks",
+            json={"title": "t", "tags": ["x"], "estimate": "2h", "custom_fields": {"k": "v"}},
+            headers=_auth(keys_file),
+        )
+        tid = r.json()["id"]
+        r = client.patch(
+            f"/tasks/{tid}",
+            json={"tags": [], "estimate": "", "custom_fields": {}},
+            headers=_auth(keys_file),
+        )
+        assert r.status_code == 200
+        task = r.json()
+        assert task["tags"] == []
+        assert task["estimate"] == ""
+        assert task["custom_fields"] == {}
+
+    def test_task_fields_survive_claim_complete(self, client, keys_file):
+        r = client.post(
+            "/tasks",
+            json={"title": "t", "tags": ["keep"], "estimate": "1h", "custom_fields": {"k": "v"}},
+            headers=_auth(keys_file),
+        )
+        tid = r.json()["id"]
+        r = client.post(f"/tasks/{tid}/claim", json={"agent_id": "angel"}, headers=_auth(keys_file))
+        assert r.status_code == 200
+        r = client.post(f"/tasks/{tid}/complete", json={"agent_id": "angel"}, headers=_auth(keys_file))
+        assert r.status_code == 200
+        task = r.json()
+        assert task["tags"] == ["keep"]
+        assert task["estimate"] == "1h"
+        assert task["custom_fields"] == {"k": "v"}

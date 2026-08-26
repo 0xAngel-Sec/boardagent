@@ -53,19 +53,16 @@ class TaskStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project)"
             )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS agents (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    kind TEXT NOT NULL DEFAULT 'ai',
-                    description TEXT,
-                    fields TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
+            # Migration: add task field columns if missing (older DBs).
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(tasks)")}
+            if "tags" not in cols:
+                conn.execute("ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
+            if "estimate" not in cols:
+                conn.execute("ALTER TABLE tasks ADD COLUMN estimate TEXT")
+            if "custom_fields" not in cols:
+                conn.execute("ALTER TABLE tasks ADD COLUMN custom_fields TEXT NOT NULL DEFAULT '{}'")
+            # Drop the agent registry table if it exists (registry was removed).
+            conn.execute("DROP TABLE IF EXISTS agents")
             conn.commit()
         finally:
             conn.close()
@@ -80,12 +77,15 @@ class TaskStore:
         status: str,
         metadata: dict[str, Any],
         now: str,
+        tags: list[str] | None = None,
+        estimate: str | None = None,
+        custom_fields: dict[str, str] | None = None,
     ) -> int:
         conn = self._connection()
         cur = conn.execute(
             """
-            INSERT INTO tasks (title, description, due, priority, project, status, owner_agent_id, metadata, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (title, description, due, priority, project, status, owner_agent_id, metadata, tags, estimate, custom_fields, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 title,
@@ -96,6 +96,9 @@ class TaskStore:
                 status,
                 None,
                 json.dumps(metadata, ensure_ascii=False),
+                json.dumps(tags or [], ensure_ascii=False),
+                estimate,
+                json.dumps(custom_fields or {}, ensure_ascii=False),
                 now,
                 now,
             ),
@@ -150,6 +153,9 @@ class TaskStore:
         metadata: dict[str, Any] | None,
         now: str,
         clear_owner: bool = False,
+        tags: list[str] | None = None,
+        estimate: str | None = None,
+        custom_fields: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         conn = self._connection()
         existing = self.get_task(task_id)
@@ -167,7 +173,8 @@ class TaskStore:
             """
             UPDATE tasks
             SET title = ?, description = ?, due = ?, priority = ?, project = ?,
-                status = ?, owner_agent_id = ?, metadata = ?, updated_at = ?
+                status = ?, owner_agent_id = ?, metadata = ?, tags = ?,
+                estimate = ?, custom_fields = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -179,6 +186,9 @@ class TaskStore:
                 pick("status", status),
                 pick("owner_agent_id", owner_agent_id),
                 json.dumps(merged_metadata, ensure_ascii=False),
+                json.dumps(pick("tags", tags), ensure_ascii=False),
+                pick("estimate", estimate),
+                json.dumps(pick("custom_fields", custom_fields), ensure_ascii=False),
                 now,
                 task_id,
             ),
@@ -192,103 +202,9 @@ class TaskStore:
         conn.commit()
         return cur.rowcount > 0
 
-    # ---- agents -----------------------------------------------------------
-
-    def create_agent(
-        self,
-        name: str,
-        kind: str,
-        description: str | None,
-        fields: dict[str, str],
-        now: str,
-    ) -> dict[str, Any]:
-        conn = self._connection()
-        cur = conn.execute(
-            """
-            INSERT INTO agents (name, kind, description, fields, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                name,
-                kind,
-                description,
-                json.dumps(fields, ensure_ascii=False),
-                now,
-                now,
-            ),
-        )
-        conn.commit()
-        return self.get_agent(cur.lastrowid)  # type: ignore[return-value]
-
-    def get_agent(self, agent_id: int) -> dict[str, Any] | None:
-        conn = self._connection()
-        row = conn.execute(
-            "SELECT * FROM agents WHERE id = ?", (agent_id,)
-        ).fetchone()
-        if row is None:
-            return None
-        return self._agent_row_to_dict(row)
-
-    def get_agent_by_name(self, name: str) -> dict[str, Any] | None:
-        conn = self._connection()
-        row = conn.execute(
-            "SELECT * FROM agents WHERE name = ?", (name,)
-        ).fetchone()
-        if row is None:
-            return None
-        return self._agent_row_to_dict(row)
-
-    def list_agents(self) -> list[dict[str, Any]]:
-        conn = self._connection()
-        rows = conn.execute("SELECT * FROM agents ORDER BY name").fetchall()
-        return [self._agent_row_to_dict(row) for row in rows]
-
-    def update_agent(
-        self,
-        agent_id: int,
-        name: str | None,
-        kind: str | None,
-        description: str | None,
-        fields: dict[str, str] | None,
-        now: str,
-    ) -> dict[str, Any] | None:
-        conn = self._connection()
-        existing = self.get_agent(agent_id)
-        if existing is None:
-            return None
-        conn.execute(
-            """
-            UPDATE agents
-            SET name = ?, kind = ?, description = ?, fields = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                name if name is not None else existing["name"],
-                kind if kind is not None else existing["kind"],
-                description if description is not None else existing["description"],
-                json.dumps(
-                    fields if fields is not None else existing["fields"],
-                    ensure_ascii=False,
-                ),
-                now,
-                agent_id,
-            ),
-        )
-        conn.commit()
-        return self.get_agent(agent_id)
-
-    def delete_agent(self, agent_id: int) -> bool:
-        conn = self._connection()
-        cur = conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
-        conn.commit()
-        return cur.rowcount > 0
-
-    def _agent_row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
-        d = dict(row)
-        d["fields"] = json.loads(d.get("fields") or "{}")
-        return d
-
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)
         d["metadata"] = json.loads(d.get("metadata") or "{}")
+        d["tags"] = json.loads(d.get("tags") or "[]")
+        d["custom_fields"] = json.loads(d.get("custom_fields") or "{}")
         return d
