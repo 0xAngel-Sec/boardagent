@@ -29,7 +29,7 @@ REM -- 2. copy files -------------------------------------------------
 if not exist "%APP_DIR%" mkdir "%APP_DIR%"
 if not exist "%~dp0dist\boardagent-server.exe" (
     echo [ERROR] dist\boardagent-server.exe not found.
-    echo         Build the exes first, then run this installer from dist\:
+    echo         Build the exes first, then run this installer:
     echo         python scripts\build_exes.py
     goto :fail
 )
@@ -70,8 +70,8 @@ echo  DONE. BoardAgent is running and will auto-start at every logon.
 echo  Open the TUI:  double-click boardagent.exe (or type "boardagent"
 echo  in a terminal).
 echo.
-echo  API:  http://127.0.0.1:7373/api/healthz
-echo  Data: %APP_DIR%\boardagent.db
+echo  API:  http://127.0.0.1:7373/healthz
+echo  Data: %USERPROFILE%\.boardagent\boardagent.db
 echo  MCP:  point your MCP host at %MCP_EXE%  (see docs/human/mcp.md)
 echo  Uninstall:  run uninstall.bat
 echo.

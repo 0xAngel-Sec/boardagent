@@ -1,67 +1,78 @@
 # BoardAgent
 
-A local-first, agent-first task manager. Free forever, no cloud.
+A task manager that lives on your computer — for you **and** your AI agents.
+Terminal UI, REST API, MCP server. Free, local, no cloud.
 
-- **REST API** — source of truth.
-- **MCP server** — thin adapter over the same service layer.
-- **Textual TUI** — foreground UI talking to the background service over localhost.
+## Install (Windows)
 
-Built from SPEC.md by Kimi K2.7.
+**You need the prebuilt exes.** Two ways to get them:
 
-## Install
+**Option A — use the release binaries (easiest):**
+Download the latest release from GitHub → unzip → double-click `INSTALL.bat`.
+That's it. It copies the programs, sets up autostart, installs a watchdog,
+and adds the app to your PATH.
+
+**Option B — build them yourself:**
+Requires Python 3.10+.
 
 ```bash
-cd boardagent
-pip install -e .
+pip install -e .          # installs the 3 CLI commands
+python scripts/build_exes.py   # builds boardagent.exe, boardagent-server.exe, boardagent-mcp.exe into dist/
 ```
 
-Dependencies: FastAPI, uvicorn, pydantic, textual, httpx, mcp.
+Then run `INSTALL.bat`.
 
 ## Run
 
-Start the background service:
+**Windows (after INSTALL.bat):** double-click `boardagent.exe` (or type
+`boardagent` in a terminal). The background server auto-starts at logon.
+
+**Anywhere (source):**
 
 ```bash
-boardagent-server
+boardagent-server   # terminal 1 — the background service
+boardagent          # terminal 2 — the task board UI
 ```
 
-Open the TUI in another terminal:
+First-time tips:
 
-```bash
-boardagent
-```
+- Press `c` to create a task, `a` for AI mode, `q` to quit.
+- Full keyboard-first: arrows move, space selects/opens, enter activates.
+- Settings tab: theme, opacity, API keys, keybinds.
 
-Use the MCP server with any MCP host:
+## Let an AI agent use the board
+
+Point your MCP host (Claude Desktop, Cursor, Hermes) at `boardagent-mcp`:
 
 ```json
 {
   "mcpServers": {
-    "boardagent": {
-      "command": "boardagent-mcp"
-    }
+    "boardagent": { "command": "C:\\path\\to\\boardagent-mcp.exe" }
   }
 }
 ```
 
-## Defaults
+Create an API key in Settings → API Keys for anything else.
 
-- API base URL: `http://127.0.0.1:7373`
-- DB: `~/.boardagent/boardagent.db` (SQLite, WAL enabled)
-- Themes: `~/.boardagent/themes/` (plus built-ins `amber` and `matrix`)
-- Settings: `~/.boardagent/settings.json`
+## How it works
+
+- **REST API** — source of truth, `http://127.0.0.1:7373`.
+- **MCP server** — thin adapter over the same service layer.
+- **Textual TUI** — the app you see, talks to the service over localhost.
+- Data lives in `~/.boardagent/boardagent.db` (SQLite). Everything local.
 
 ## Docs
 
-- **Agent docs** (auto-generated): `docs/agent/`
-- **Human docs**: `docs/human/`
-- **Engineering decisions**: `DECISIONS.md`
+- **For humans**: `docs/human/` — intro, MCP setup, themes, packaging.
+- **For AI agents**: `docs/agent/` — token-optimized REST + MCP references.
+- **Engineering decisions**: `DECISIONS.md`.
 
 ## Development
 
 ```bash
 python -m pytest
-python scripts/generate_agent_docs.py   # needs boardagent-server running
-python scripts/build_exes.py            # build the Windows exes into dist/
+python scripts/generate_agent_docs.py   # needs the server running
+python scripts/build_exes.py            # Windows exes into dist/
 ```
 
 ## License

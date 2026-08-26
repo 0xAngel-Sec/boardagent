@@ -40,6 +40,6 @@ echo [4/4] %APP_DIR% removed
 
 echo.
 echo  BoardAgent uninstalled.
-echo  Your tasks lived in %APP_DIR%\boardagent.db and are gone.
+echo  Your tasks lived in %USERPROFILE%\.boardagent\boardagent.db and are gone.
 echo  Backup that file before uninstalling if you want to keep them.
 exit /b 0

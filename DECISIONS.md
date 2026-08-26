@@ -35,7 +35,7 @@ This document records the open-question defaults chosen during the initial build
 
 - **pyproject.toml with console scripts:** `boardagent-server`, `boardagent`, `boardagent-mcp`.
 - **MIT license.** `LICENSE` included.
-- **PyInstaller exes are documented but not pre-built.** Build scripts are in `scripts/build_exe*.bat` and `docs/human/packaging.md`.
+- **PyInstaller exes are documented but not pre-built.** Build with `python scripts/build_exes.py`; install with `INSTALL.bat` (see `docs/human/packaging.md`).
 
 ## Testing
 
