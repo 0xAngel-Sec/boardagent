@@ -20,6 +20,7 @@ from .config import (
     load_server_settings,
     save_api_keys,
     save_server_settings,
+    settings_path,
 )
 from .models import (
     ApiKey,
@@ -137,6 +138,12 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         keys = load_api_keys()
         if key not in keys:
             raise HTTPException(status_code=404, detail="key not found")
+        if keys[key].get("name") == "console":
+            # The console key is the TUI's own admin credential. Deleting it
+            # would lock the local UI out of the API, so it is protected.
+            raise HTTPException(
+                status_code=400, detail="console key cannot be deleted"
+            )
         del keys[key]
         save_api_keys(keys)
         return JSONResponse(status_code=204, content={})
@@ -305,6 +312,41 @@ def _run_forever(host: str, port: int) -> None:
             time.sleep(2)
 
 
+def _ensure_console_key() -> str:
+    """Return the console admin key, creating or re-registering as needed.
+
+    The console key is the local UI's credential, stored in settings.json
+    and registered in keys.json. If it exists in settings but is missing
+    from keys.json (e.g. all keys were deleted via the API), re-register it
+    so the server is never unreachable. If neither exists, mint a new one.
+
+    NOTE: reads settings.json raw — load_server_settings() strips
+    non-default keys, so console_key would always appear missing.
+    """
+    import json
+
+    from .config import save_server_settings
+
+    settings: dict[str, Any] = {}
+    try:
+        p = settings_path()
+        if p.exists():
+            settings = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        settings = {}
+    key = settings.get("console_key")
+    keys = load_api_keys()
+    if key and key in keys:
+        return key
+    if not key:
+        key = generate_api_key()
+        settings["console_key"] = key
+        save_server_settings(settings)
+    keys[key] = {"name": "console", "role": ROLE_ADMIN}
+    save_api_keys(keys)
+    return key
+
+
 def main() -> None:
     import sys
 
@@ -316,6 +358,14 @@ def main() -> None:
     if not settings.get("api_enabled", True):
         print("API disabled in settings; refusing to start.", flush=True)
         sys.exit(1)
+
+    # Ensure the server can never come up unreachable: if no console key
+    # exists yet, mint one (the TUI creates its own on first use, but a
+    # fresh install may start the server before the TUI ever runs).
+    keys = load_api_keys()
+    if not any(info.get("name") == "console" for info in keys.values()):
+        _ensure_console_key()
+
     if "--check" in sys.argv:  # watchdog probe: exit 0 if already running
         sys.exit(0 if _port_in_use(host, port) else 1)
     if "--watch" in sys.argv or "--watchdog" in sys.argv:

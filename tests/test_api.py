@@ -12,6 +12,7 @@ from boardagent.config import (
     ROLE_READ,
     ROLE_WRITE,
     generate_api_key,
+    load_api_keys,
     save_api_keys,
     save_server_settings,
 )
@@ -531,6 +532,45 @@ class TestReviewFixes:
         assert r.status_code == 201
         due = r.json()["due"]
         assert due.endswith("+00:00") or due.endswith("Z"), due
+
+    def test_console_key_cannot_be_deleted(self, client, keys_file):
+        """The console key is protected: deleting it via API is rejected.
+
+        Without this, a user could delete every key (including the TUI's
+        own credential) and lock the local UI out of the API.
+        """
+        from boardagent.api import _ensure_console_key
+
+        console_key = _ensure_console_key()
+        r = client.delete(f"/keys/{console_key}", headers=_auth(keys_file))
+        assert r.status_code == 400
+        # key still works
+        assert console_key in load_api_keys()
+
+    def test_console_key_self_heals(self, tmp_path, monkeypatch):
+        """If the console key was deleted from keys.json, re-register it.
+
+        The TUI's _load_console_key and the server's _ensure_console_key both
+        heal this state, so the app can never be locked out permanently.
+        """
+        from boardagent import config as cfg
+        from boardagent.api import _ensure_console_key
+
+        monkeypatch.setattr(cfg, "data_dir", lambda: tmp_path)
+        admin_key = generate_api_key()
+        save_api_keys({admin_key: {"name": "admin", "role": ROLE_ADMIN}})
+
+        console_key = _ensure_console_key()
+        assert console_key in load_api_keys()
+
+        # Simulate the lockout: console key wiped from keys.json.
+        save_api_keys({admin_key: {"name": "admin", "role": ROLE_ADMIN}})
+        assert console_key not in load_api_keys()
+
+        # Self-heal: same settings key is re-registered.
+        healed = _ensure_console_key()
+        assert healed == console_key
+        assert healed in load_api_keys()
 
     def test_claim_race_guard(self, service):
         # Finding #1: second claim on the same task must fail atomically.

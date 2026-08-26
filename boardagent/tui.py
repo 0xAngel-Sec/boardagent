@@ -154,15 +154,18 @@ def _load_console_key() -> str:
 
     The console key is stored in settings.json and registered in keys.json so
     the server accepts it. This keeps API auth honest even for the local TUI.
+    If the key exists in settings but is missing from keys.json (all keys
+    deleted via the API), re-register it — the UI must never lock itself out.
     """
     settings = _load_settings()
     key = settings.get("console_key")
-    if key:
-        return key
-    key = generate_api_key()
-    settings["console_key"] = key
-    _save_settings(settings)
     keys = load_api_keys()
+    if key and key in keys:
+        return key
+    if not key:
+        key = generate_api_key()
+        settings["console_key"] = key
+        _save_settings(settings)
     keys[key] = {"name": "console", "role": ROLE_ADMIN}
     save_api_keys(keys)
     return key
@@ -403,7 +406,12 @@ class KeysTable(DataTable):
         """
         if self.cursor_row is None or not self.row_count:
             return
-        key = self.get_row_at(self.cursor_row)[2]
+        # The Key cell shows the MASK (first3…last3); the row key carries
+        # the full key. Pin/delete must use the row key, not the cell.
+        row_key = list(self.rows)[self.cursor_row]
+        key = getattr(row_key, "value", None)
+        if not key:
+            return
         if self.pinned_key == key:
             self.pinned_key = None
             self._set_pin_marker(key, False)

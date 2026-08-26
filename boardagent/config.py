@@ -108,7 +108,11 @@ def load_server_settings() -> dict[str, Any]:
 
 
 def save_server_settings(settings: dict[str, Any]) -> None:
-    """Persist server settings, preserving any other settings keys."""
+    """Persist server settings, preserving any other settings keys.
+
+    Merges over the existing file rather than replacing it: settings.json
+    also carries console_key and keybinds, which must never be stripped.
+    """
     path = settings_path()
     data: dict[str, Any] = {}
     if path.exists():
@@ -116,9 +120,7 @@ def save_server_settings(settings: dict[str, Any]) -> None:
             data = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             data = {}
-    for key in DEFAULT_SERVER_SETTINGS:
-        if key in settings:
-            data[key] = settings[key]
+    data.update(settings)
     _atomic_write(path, json.dumps(data, indent=2))
 
 
