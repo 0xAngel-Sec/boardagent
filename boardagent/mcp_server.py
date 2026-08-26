@@ -212,10 +212,11 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
     if not settings.get("mcp_enabled", True):
         raise BoardAgentError("MCP disabled in settings")
 
-    # Resolve auth once at startup.
-    auth_role = _check_auth()
-
     def _require(required: str) -> None:
+        # Re-check auth per call: load_api_keys is mtime-cached, so this is
+        # cheap, and role changes (key rotation/demotion) take effect
+        # without an MCP server restart.
+        auth_role = _check_auth()
         if auth_role is None:
             return  # unauthenticated local mode: allow everything
         if ROLE_RANK.get(auth_role, 0) < ROLE_RANK[required]:
@@ -258,12 +259,17 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     # Clamp to the same bounds the REST API enforces; a
                     # negative limit would make SQLite return the whole table.
                     limit = max(1, min(500, int(limit)))
+                offset = args.get("offset", 0)
+                try:
+                    offset = max(0, int(offset))
+                except (TypeError, ValueError):
+                    offset = 0
                 tasks = svc.list_tasks(
                     status=status,
                     project=args.get("project"),
                     owner=args.get("owner"),
                     limit=limit,
-                    offset=args.get("offset", 0),
+                    offset=offset,
                 )
                 text = _to_json({"tasks": tasks, "count": len(tasks)})
 
@@ -296,7 +302,6 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 result = svc.update_task(
                     args["id"],
                     update,
-                    caller_agent_id=args.get("agent_id"),
                     caller_role=auth_role,
                 )
                 if result is None:

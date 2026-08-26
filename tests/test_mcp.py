@@ -137,7 +137,11 @@ async def test_mcp_auth_roles(tmp_path, monkeypatch):
 
 @pytest.mark.anyio
 async def test_mcp_invalid_key_rejected(tmp_path, monkeypatch):
-    """An invalid BOARDAGENT_API_KEY fails the server at startup."""
+    """An invalid BOARDAGENT_API_KEY is rejected on tool calls.
+
+    Auth is re-checked per call (load_api_keys is mtime-cached), so the
+    server starts fine but every tool call fails with an auth error.
+    """
     from boardagent import config as cfg
 
     monkeypatch.setattr(cfg, "data_dir", lambda: tmp_path)
@@ -146,5 +150,9 @@ async def test_mcp_invalid_key_rejected(tmp_path, monkeypatch):
     server_params = _server_params(tmp_path, {"BOARDAGENT_API_KEY": "ba_bogus"})
     async with stdio_client(server_params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
-            with pytest.raises(Exception):
-                await session.initialize()
+            await session.initialize()
+            result = await session.call_tool(
+                "boardagent_list_tasks", arguments={}
+            )
+            assert result.is_error is True
+            assert "invalid API key" in result.content[0].text

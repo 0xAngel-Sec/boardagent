@@ -307,9 +307,13 @@ class TaskStore:
 
     def delete_task(self, task_id: int) -> bool:
         conn = self._connection()
-        cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        conn.commit()
-        return cur.rowcount > 0
+        try:
+            cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            conn.commit()
+            return cur.rowcount > 0
+        except Exception:
+            conn.rollback()
+            raise
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)

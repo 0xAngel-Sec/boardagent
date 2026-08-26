@@ -580,3 +580,32 @@ class TestReviewFixes:
         got = client.get(f"/tasks/{tid}", headers=_auth(keys_file)).json()
         assert got["status"] == "todo"
         assert got["owner_agent_id"] is None
+
+    def test_null_custom_fields_clears_not_500(self, client, keys_file):
+        # GLM re-check finding #1: custom_fields:null must clear to {} (dict),
+        # not [] (list) — [] breaks the response model with a 500.
+        r = client.post(
+            "/tasks",
+            json={"title": "t", "custom_fields": {"k": "v"}},
+            headers=_auth(keys_file),
+        )
+        tid = r.json()["id"]
+        r = client.patch(
+            f"/tasks/{tid}", json={"custom_fields": None}, headers=_auth(keys_file)
+        )
+        assert r.status_code == 200
+        assert r.json()["custom_fields"] == {}
+
+    def test_patch_done_on_unowned_rejected(self, client, keys_file):
+        # GLM re-check finding #3: PATCH done on an unowned task must be
+        # rejected — it would bypass the complete_task ownership invariant.
+        r = client.post(
+            "/keys", json={"name": "writer", "role": "write"}, headers=_auth(keys_file)
+        )
+        write_key = r.json()["key"]
+        r = client.post("/tasks", json={"title": "unowned"}, headers=_auth(write_key))
+        tid = r.json()["id"]
+        r = client.patch(f"/tasks/{tid}", json={"status": "done"}, headers=_auth(write_key))
+        assert r.status_code == 400
+        got = client.get(f"/tasks/{tid}", headers=_auth(write_key)).json()
+        assert got["status"] == "todo"

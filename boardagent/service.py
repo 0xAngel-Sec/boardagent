@@ -133,6 +133,11 @@ class TaskService:
             if owner != caller_agent_id and not is_admin:
                 raise NotOwnerError("only the owning agent can start this task")
         elif new_status == Status.DONE.value:
+            # Unowned tasks must go through complete (which records the
+            # owner); PATCHing done on an unowned task would bypass the
+            # ownership invariant and leave a done task with no owner.
+            if owner is None:
+                raise BoardAgentError("use complete to finish a task")
             if owner != caller_agent_id and not is_admin:
                 raise NotOwnerError("only the owning agent can complete this task")
         elif new_status == Status.BLOCKED.value:
@@ -146,7 +151,6 @@ class TaskService:
         self,
         task_id: int,
         update: TaskUpdate,
-        caller_agent_id: str | None = None,
         caller_role: str | None = None,
     ) -> dict[str, Any] | None:
         existing = self.store.get_task(task_id)
@@ -176,6 +180,12 @@ class TaskService:
                 return _UNSET
             value = getattr(update, field)
             return value if value is not None else []
+
+        def dict_val(field: str) -> Any:
+            if field not in sent:
+                return _UNSET
+            value = getattr(update, field)
+            return value if value is not None else {}
 
         metadata = _UNSET
         if "metadata" in sent:
@@ -217,7 +227,7 @@ class TaskService:
             clear_owner=clear_owner,
             tags=list_val("tags"),
             estimate=val("estimate"),
-            custom_fields=list_val("custom_fields"),
+            custom_fields=dict_val("custom_fields"),
             links=list_val("links"),
             acceptance_criteria=val("acceptance_criteria"),
             dependencies=list_val("dependencies"),
