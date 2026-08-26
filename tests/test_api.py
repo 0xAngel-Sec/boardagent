@@ -306,7 +306,7 @@ class TestTaskFields:
                 "description": "do the thing",
                 "tags": ["urgent", "backend"],
                 "estimate": "2h",
-                "category": "feature",
+
                 "links": ["https://example.com", "C:/repo/file.py"],
                 "acceptance_criteria": "works on prod",
                 "dependencies": ["#12", "#34"],
@@ -320,7 +320,7 @@ class TestTaskFields:
         assert task["description"] == "do the thing"
         assert task["tags"] == ["urgent", "backend"]
         assert task["estimate"] == "2h"
-        assert task["category"] == "feature"
+
         assert task["links"] == ["https://example.com", "C:/repo/file.py"]
         assert task["acceptance_criteria"] == "works on prod"
         assert task["dependencies"] == ["#12", "#34"]
@@ -333,7 +333,7 @@ class TestTaskFields:
         task = r.json()
         assert task["tags"] == []
         assert task["estimate"] is None
-        assert task["category"] is None
+
         assert task["links"] == []
         assert task["acceptance_criteria"] is None
         assert task["dependencies"] == []
@@ -349,7 +349,7 @@ class TestTaskFields:
                 "description": "updated",
                 "tags": ["a", "b"],
                 "estimate": "1d",
-                "category": "bug",
+
                 "links": ["https://x.dev"],
                 "acceptance_criteria": "no regressions",
                 "dependencies": ["#1"],
@@ -363,7 +363,7 @@ class TestTaskFields:
         assert task["description"] == "updated"
         assert task["tags"] == ["a", "b"]
         assert task["estimate"] == "1d"
-        assert task["category"] == "bug"
+
         assert task["links"] == ["https://x.dev"]
         assert task["acceptance_criteria"] == "no regressions"
         assert task["dependencies"] == ["#1"]
@@ -373,7 +373,7 @@ class TestTaskFields:
     def test_update_task_fields_partial(self, client, keys_file):
         r = client.post(
             "/tasks",
-            json={"title": "t", "tags": ["keep"], "estimate": "30m", "category": "chore"},
+            json={"title": "t", "tags": ["keep"], "estimate": "30m"},
             headers=_auth(keys_file),
         )
         tid = r.json()["id"]
@@ -385,7 +385,7 @@ class TestTaskFields:
         # untouched fields survive a partial update
         assert task["tags"] == ["keep"]
         assert task["estimate"] == "1h"
-        assert task["category"] == "chore"
+
 
     def test_clear_task_fields(self, client, keys_file):
         r = client.post(
@@ -394,7 +394,7 @@ class TestTaskFields:
                 "title": "t",
                 "tags": ["x"],
                 "estimate": "2h",
-                "category": "bug",
+
                 "links": ["https://x.dev"],
                 "acceptance_criteria": "ac",
                 "dependencies": ["#1"],
@@ -409,7 +409,7 @@ class TestTaskFields:
             json={
                 "tags": [],
                 "estimate": "",
-                "category": "",
+
                 "links": [],
                 "acceptance_criteria": "",
                 "dependencies": [],
@@ -422,7 +422,7 @@ class TestTaskFields:
         task = r.json()
         assert task["tags"] == []
         assert task["estimate"] == ""
-        assert task["category"] == ""
+
         assert task["links"] == []
         assert task["acceptance_criteria"] == ""
         assert task["dependencies"] == []
@@ -436,7 +436,7 @@ class TestTaskFields:
                 "title": "t",
                 "tags": ["keep"],
                 "estimate": "1h",
-                "category": "feature",
+
                 "links": ["https://x.dev"],
                 "acceptance_criteria": "ac",
                 "dependencies": ["#2"],
@@ -453,7 +453,7 @@ class TestTaskFields:
         task = r.json()
         assert task["tags"] == ["keep"]
         assert task["estimate"] == "1h"
-        assert task["category"] == "feature"
+
         assert task["links"] == ["https://x.dev"]
         assert task["acceptance_criteria"] == "ac"
         assert task["dependencies"] == ["#2"]

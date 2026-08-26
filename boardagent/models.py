@@ -59,7 +59,6 @@ class TaskBase(BaseModel):
     status: Status = Status.TODO
     tags: list[str] = Field(default_factory=list)
     estimate: str | None = Field(default=None, max_length=50)
-    category: str | None = Field(default=None, max_length=50)
     links: list[str] = Field(default_factory=list)
     acceptance_criteria: str | None = None
     dependencies: list[str] = Field(default_factory=list)
@@ -81,7 +80,6 @@ class TaskUpdate(BaseModel):
     status: Status | None = None
     tags: list[str] | None = None
     estimate: str | None = Field(default=None, max_length=50)
-    category: str | None = Field(default=None, max_length=50)
     links: list[str] | None = None
     acceptance_criteria: str | None = None
     dependencies: list[str] | None = None

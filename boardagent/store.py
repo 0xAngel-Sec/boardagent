@@ -61,8 +61,6 @@ class TaskStore:
                 conn.execute("ALTER TABLE tasks ADD COLUMN estimate TEXT")
             if "custom_fields" not in cols:
                 conn.execute("ALTER TABLE tasks ADD COLUMN custom_fields TEXT NOT NULL DEFAULT '{}'")
-            if "category" not in cols:
-                conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT")
             if "links" not in cols:
                 conn.execute("ALTER TABLE tasks ADD COLUMN links TEXT NOT NULL DEFAULT '[]'")
             if "acceptance_criteria" not in cols:
@@ -90,7 +88,6 @@ class TaskStore:
         tags: list[str] | None = None,
         estimate: str | None = None,
         custom_fields: dict[str, str] | None = None,
-        category: str | None = None,
         links: list[str] | None = None,
         acceptance_criteria: str | None = None,
         dependencies: list[str] | None = None,
@@ -99,8 +96,8 @@ class TaskStore:
         conn = self._connection()
         cur = conn.execute(
             """
-            INSERT INTO tasks (title, description, due, priority, project, status, owner_agent_id, metadata, tags, estimate, custom_fields, category, links, acceptance_criteria, dependencies, notes, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (title, description, due, priority, project, status, owner_agent_id, metadata, tags, estimate, custom_fields, links, acceptance_criteria, dependencies, notes, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 title,
@@ -114,7 +111,6 @@ class TaskStore:
                 json.dumps(tags or [], ensure_ascii=False),
                 estimate,
                 json.dumps(custom_fields or {}, ensure_ascii=False),
-                category,
                 json.dumps(links or [], ensure_ascii=False),
                 acceptance_criteria,
                 json.dumps(dependencies or [], ensure_ascii=False),
@@ -176,7 +172,6 @@ class TaskStore:
         tags: list[str] | None = None,
         estimate: str | None = None,
         custom_fields: dict[str, str] | None = None,
-        category: str | None = None,
         links: list[str] | None = None,
         acceptance_criteria: str | None = None,
         dependencies: list[str] | None = None,
@@ -199,7 +194,7 @@ class TaskStore:
             UPDATE tasks
             SET title = ?, description = ?, due = ?, priority = ?, project = ?,
                 status = ?, owner_agent_id = ?, metadata = ?, tags = ?,
-                estimate = ?, custom_fields = ?, category = ?, links = ?,
+                estimate = ?, custom_fields = ?, links = ?,
                 acceptance_criteria = ?, dependencies = ?, notes = ?,
                 updated_at = ?
             WHERE id = ?
@@ -216,7 +211,6 @@ class TaskStore:
                 json.dumps(pick("tags", tags), ensure_ascii=False),
                 pick("estimate", estimate),
                 json.dumps(pick("custom_fields", custom_fields), ensure_ascii=False),
-                pick("category", category),
                 json.dumps(pick("links", links), ensure_ascii=False),
                 pick("acceptance_criteria", acceptance_criteria),
                 json.dumps(pick("dependencies", dependencies), ensure_ascii=False),

@@ -831,7 +831,7 @@ class BoardAgentApp(App):
                 table.remove_row(key)
 
         # (re)create columns only when the mode's column set changed
-        expected = 15 if self.ai_mode else 9
+        expected = 14 if self.ai_mode else 8
         if len(table.columns) != expected:
             # Removing columns drops the cell data of every existing row
             # (Textual keys cells by column), so rows must be rebuilt too —
@@ -841,9 +841,9 @@ class BoardAgentApp(App):
             for col in list(table.columns):
                 table.remove_column(getattr(col, "key", col))
             if self.ai_mode:
-                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Category", "Links", "Acceptance", "Dependencies", "Notes", "Status", "Priority", "Project", "Agent", "Metadata")
+                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Links", "Acceptance", "Dependencies", "Notes", "Status", "Priority", "Project", "Agent", "Metadata")
             else:
-                table.add_columns("Title", "Description", "Tags", "Estimate", "Category", "Status", "Priority", "Project", "Due")
+                table.add_columns("Title", "Description", "Tags", "Estimate", "Status", "Priority", "Project", "Due")
 
         for t in self.tasks:
             key = str(t["id"])
@@ -854,7 +854,6 @@ class BoardAgentApp(App):
             desc = (t.get("description") or "").replace("\n", " ")[:40]
             tags = ", ".join(t.get("tags") or [])[:30]
             estimate = t.get("estimate") or ""
-            category = t.get("category") or ""
             if self.ai_mode:
                 metadata = json.dumps(t.get("metadata", {}))
                 links = ", ".join(t.get("links") or [])[:40]
@@ -867,7 +866,6 @@ class BoardAgentApp(App):
                     desc,
                     tags,
                     estimate,
-                    category,
                     links,
                     acceptance,
                     deps,
@@ -891,7 +889,6 @@ class BoardAgentApp(App):
                     desc,
                     tags,
                     estimate,
-                    category,
                     self._colored(status, f"status-{status}"),
                     self._colored(priority, f"priority-{priority}"),
                     t.get("project") or "",
@@ -1097,8 +1094,6 @@ class BoardAgentApp(App):
             lines.append(f"Due: {task['due']}")
         if task.get("estimate"):
             lines.append(f"Estimate: {task['estimate']}")
-        if task.get("category"):
-            lines.append(f"Category: {task['category']}")
         tags = task.get("tags") or []
         if tags:
             lines.append(f"Tags: {', '.join(tags)}")
@@ -1542,8 +1537,6 @@ class CreateTaskScreen(ArrowNavScreen):
             yield Input(placeholder="e.g. urgent, backend", id="tags")
             yield Label("Estimate", classes="settings-label")
             yield Input(placeholder="e.g. 2h, 1d", id="estimate")
-            yield Label("Category", classes="settings-label")
-            yield Input(placeholder="bug / feature / chore / research / refactor", id="category")
             yield Label("Links (comma separated)", classes="settings-label")
             yield Input(placeholder="https://... or C:\\path\\to\\file", id="links")
             yield Label("Acceptance criteria", classes="settings-label")
@@ -1604,7 +1597,6 @@ class CreateTaskScreen(ArrowNavScreen):
         priority = self.query_one("#priority", Select).value or "white"
         tags = [t.strip() for t in self.query_one("#tags", Input).value.split(",") if t.strip()]
         estimate = self.query_one("#estimate", Input).value.strip()
-        category = self.query_one("#category", Input).value.strip()
         links = [l.strip() for l in self.query_one("#links", Input).value.split(",") if l.strip()]
         acceptance = self.query_one("#acceptance", TextArea).text
         deps = [d.strip() for d in self.query_one("#dependencies", Input).value.split(",") if d.strip()]
@@ -1624,7 +1616,6 @@ class CreateTaskScreen(ArrowNavScreen):
                     "description": description,
                     "tags": tags,
                     "estimate": estimate,
-                    "category": category,
                     "links": links,
                     "acceptance_criteria": acceptance,
                     "dependencies": deps,
@@ -1676,8 +1667,6 @@ class EditTaskScreen(ArrowNavScreen):
             )
             yield Label("Estimate", classes="settings-label")
             yield Input(value=self.task_data.get("estimate") or "", id="estimate")
-            yield Label("Category", classes="settings-label")
-            yield Input(value=self.task_data.get("category") or "", id="category")
             yield Label("Links (comma separated)", classes="settings-label")
             yield Input(
                 value=", ".join(self.task_data.get("links") or []),
@@ -1745,7 +1734,6 @@ class EditTaskScreen(ArrowNavScreen):
         priority = self.query_one("#priority", Select).value or "white"
         tags = [t.strip() for t in self.query_one("#tags", Input).value.split(",") if t.strip()]
         estimate = self.query_one("#estimate", Input).value.strip()
-        category = self.query_one("#category", Input).value.strip()
         links = [l.strip() for l in self.query_one("#links", Input).value.split(",") if l.strip()]
         acceptance = self.query_one("#acceptance", TextArea).text
         deps = [d.strip() for d in self.query_one("#dependencies", Input).value.split(",") if d.strip()]
@@ -1765,7 +1753,6 @@ class EditTaskScreen(ArrowNavScreen):
                     "description": description,
                     "tags": tags,
                     "estimate": estimate,
-                    "category": category,
                     "links": links,
                     "acceptance_criteria": acceptance,
                     "dependencies": deps,
