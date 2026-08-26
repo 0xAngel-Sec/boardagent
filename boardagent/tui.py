@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from datetime import datetime
 from typing import Any
 
@@ -139,80 +140,38 @@ def _api_headers() -> dict[str, str]:
     return {API_KEY_HEADER: _load_console_key()}
 
 
-def _find_windows_terminal_window() -> int | None:
-    """Find the Windows Terminal top-level window hosting this process.
-
-    When a console app runs inside Windows Terminal (ConPTY), GetConsoleWindow()
-    returns a hidden pseudo-console that cannot be made translucent. Walk the
-    parent process chain up to WindowsTerminal.exe and return its visible
-    top-level window handle.
-    """
+def _find_window_by_title(marker: str) -> int | None:
+    """Find a visible console/CASCADIA window whose title contains marker."""
     try:
         import ctypes
         from ctypes import wintypes
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         user32 = ctypes.windll.user32
+        EnumWindows = user32.EnumWindows
+        GetClassNameW = user32.GetClassNameW
+        GetWindowTextW = user32.GetWindowTextW
+        IsWindowVisible = user32.IsWindowVisible
+        EnumWindowsProc = ctypes.WINFUNCTYPE(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
 
-        TH32CS_SNAPPROCESS = 0x00000002
+        found: list[int] = []
 
-        class PROCESSENTRY32W(ctypes.Structure):
-            _fields_ = [
-                ("dwSize", wintypes.DWORD),
-                ("cntUsage", wintypes.DWORD),
-                ("th32ProcessID", wintypes.DWORD),
-                ("th32DefaultHeapID", ctypes.POINTER(wintypes.ULONG)),
-                ("th32ModuleID", wintypes.DWORD),
-                ("cntThreads", wintypes.DWORD),
-                ("th32ParentProcessID", wintypes.DWORD),
-                ("pcPriClassBase", ctypes.c_long),
-                ("dwFlags", wintypes.DWORD),
-                ("szExeFile", ctypes.c_wchar * 260),
-            ]
+        def cb(hwnd, lparam):
+            cls = ctypes.create_unicode_buffer(256)
+            GetClassNameW(hwnd, cls, 256)
+            if cls.value in (
+                "CASCADIA_HOSTING_WINDOW_CLASS",
+                "ConsoleWindowClass",
+            ) and IsWindowVisible(hwnd):
+                title = ctypes.create_unicode_buffer(512)
+                GetWindowTextW(hwnd, title, 512)
+                if marker in title.value:
+                    found.append(hwnd)
+            return True
 
-        def get_parent(pid: int) -> tuple[int, str] | None:
-            snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-            if snap == -1:
-                return None
-            try:
-                entry = PROCESSENTRY32W()
-                entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
-                if not kernel32.Process32FirstW(snap, ctypes.byref(entry)):
-                    return None
-                while True:
-                    if entry.th32ProcessID == pid:
-                        return entry.th32ParentProcessID, entry.szExeFile
-                    if not kernel32.Process32NextW(snap, ctypes.byref(entry)):
-                        return None
-            finally:
-                kernel32.CloseHandle(snap)
-
-        pid = ctypes.windll.kernel32.GetCurrentProcessId()
-        for _ in range(15):
-            info = get_parent(pid)
-            if not info:
-                return None
-            ppid, exe = info
-            if exe.lower() == "windowsterminal.exe":
-                EnumWindows = user32.EnumWindows
-                GetWindowThreadProcessId = user32.GetWindowThreadProcessId
-                IsWindowVisible = user32.IsWindowVisible
-                EnumWindowsProc = ctypes.WINFUNCTYPE(
-                    wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
-                )
-                found: list[int] = []
-
-                def cb(hwnd, lparam):
-                    wpid = wintypes.DWORD()
-                    GetWindowThreadProcessId(hwnd, ctypes.byref(wpid))
-                    if wpid.value == ppid and IsWindowVisible(hwnd):
-                        found.append(hwnd)
-                    return True
-
-                EnumWindows(EnumWindowsProc(cb), 0)
-                return found[0] if found else None
-            pid = ppid
-        return None
+        EnumWindows(EnumWindowsProc(cb), 0)
+        return found[0] if found else None
     except Exception:
         return None
 
@@ -221,9 +180,10 @@ def _apply_opacity(opacity: int) -> None:
     """Apply window opacity to the terminal window (Windows only).
 
     Uses SetLayeredWindowAttributes with LWA_ALPHA. Under Windows Terminal the
-    console window is a hidden ConPTY, so the Windows Terminal window itself is
-    targeted (found by walking the parent process chain); otherwise the classic
-    console window is used.
+    console window is a hidden ConPTY, so the window is found by setting a
+    unique console title (which WT propagates to the tab/window title) and
+    matching it against visible CASCADIA/console windows. Falls back to
+    GetConsoleWindow() for classic consoles.
     """
     if os.name != "nt":
         return
@@ -234,16 +194,28 @@ def _apply_opacity(opacity: int) -> None:
         WS_EX_LAYERED = 0x00080000
         LWA_ALPHA = 0x2
 
-        hwnd = _find_windows_terminal_window()
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32 = ctypes.windll.user32
+
+        marker = f"BA-OPACITY-{kernel32.GetCurrentProcessId()}"
+        kernel32.SetConsoleTitleW(marker)
+
+        hwnd = None
+        for _ in range(10):
+            hwnd = _find_window_by_title(marker)
+            if hwnd:
+                break
+            time.sleep(0.05)
         if not hwnd:
-            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            hwnd = kernel32.GetConsoleWindow()
         if not hwnd:
             return
-        user32 = ctypes.windll.user32
         style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED)
         alpha = max(0, min(100, int(opacity))) * 255 // 100
         user32.SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)
+        # Restore a sane title (Textual's OSC title may not reach WT).
+        kernel32.SetConsoleTitleW(f"BoardAgent {__version__}")
     except Exception:
         pass
 
@@ -506,6 +478,14 @@ class BoardAgentApp(App):
             self.query_one(TaskTable).focus()
         except Exception:
             pass
+        # Key action buttons are mouse affordances; arrows skip them so
+        # navigation from the API keys section to keybinds is one press per
+        # field, not two per button.
+        for bid in ("create-key", "delete-key"):
+            try:
+                self.query_one(f"#{bid}", Button).can_focus = False
+            except Exception:
+                pass
 
     def _register_themes(self) -> None:
         """Register every BoardAgent theme as a Textual Theme."""
@@ -590,6 +570,8 @@ class BoardAgentApp(App):
                         value=str(self.settings.get("opacity", 100)),
                         placeholder="0-100",
                         id="opacity-input",
+                        restrict=r"(100|[1-9][0-9]?|)",
+                        max_length=3,
                     ),
                     Label("Backend", classes="settings-section"),
                     Label("Host", classes="settings-label"),
