@@ -1480,6 +1480,29 @@ class BoardAgentApp(App):
             asyncio.create_task(self.refresh_settings_tab())
 
 
+class ArrowNavTextArea(TextArea):
+    """TextArea where arrows exit to the next/previous field at the edges.
+
+    Stock Textual TextArea swallows up/down for text-cursor movement, so a
+    modal form can get stuck on a multi-line field (down keeps moving the
+    text cursor, never the focus). When the cursor is on the first/last
+    line, up/down moves FOCUS to the next field instead — matching the
+    app's arrow-driven navigation. Mid-document, arrows still edit text.
+    """
+
+    def action_cursor_up(self, select: bool = False) -> None:
+        if self.cursor_at_first_line:
+            self.screen.focus_previous()
+            return
+        super().action_cursor_up(select)
+
+    def action_cursor_down(self, select: bool = False) -> None:
+        if self.cursor_at_last_line:
+            self.screen.focus_next()
+            return
+        super().action_cursor_down(select)
+
+
 class ArrowNavScreen(Screen):
     """Modal screens navigate fields with arrows, not just Tab.
 
@@ -1635,7 +1658,7 @@ class CreateTaskScreen(ArrowNavScreen):
             yield Input(placeholder="Title", id="title")
             yield Input(placeholder="Project", id="project")
             yield Label("Description", classes="settings-label")
-            yield TextArea("", id="task-desc")
+            yield ArrowNavTextArea("", id="task-desc")
             yield Label("Tags (comma separated)", classes="settings-label")
             yield Input(placeholder="e.g. urgent, backend", id="tags")
             yield Label("Estimate", classes="settings-label")
@@ -1643,11 +1666,11 @@ class CreateTaskScreen(ArrowNavScreen):
             yield Label("Links (comma separated)", classes="settings-label")
             yield Input(placeholder="https://... or C:\\path\\to\\file", id="links")
             yield Label("Acceptance criteria", classes="settings-label")
-            yield TextArea("", id="acceptance")
+            yield ArrowNavTextArea("", id="acceptance")
             yield Label("Dependencies (comma separated)", classes="settings-label")
             yield Input(placeholder="e.g. #12, #34 or task names", id="dependencies")
             yield Label("Notes (one per line)", classes="settings-label")
-            yield TextArea("", id="notes")
+            yield ArrowNavTextArea("", id="notes")
             yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
                 value="white",
@@ -1762,7 +1785,7 @@ class EditTaskScreen(ArrowNavScreen):
             yield Input(value=self.task_data.get("title", ""), id="title")
             yield Input(value=self.task_data.get("project") or "", id="project")
             yield Label("Description", classes="settings-label")
-            yield TextArea(self.task_data.get("description") or "", id="task-desc")
+            yield ArrowNavTextArea(self.task_data.get("description") or "", id="task-desc")
             yield Label("Tags (comma separated)", classes="settings-label")
             yield Input(
                 value=", ".join(self.task_data.get("tags") or []),
@@ -1776,14 +1799,14 @@ class EditTaskScreen(ArrowNavScreen):
                 id="links",
             )
             yield Label("Acceptance criteria", classes="settings-label")
-            yield TextArea(self.task_data.get("acceptance_criteria") or "", id="acceptance")
+            yield ArrowNavTextArea(self.task_data.get("acceptance_criteria") or "", id="acceptance")
             yield Label("Dependencies (comma separated)", classes="settings-label")
             yield Input(
                 value=", ".join(self.task_data.get("dependencies") or []),
                 id="dependencies",
             )
             yield Label("Notes (one per line)", classes="settings-label")
-            yield TextArea("\n".join(self.task_data.get("notes") or []), id="notes")
+            yield ArrowNavTextArea("\n".join(self.task_data.get("notes") or []), id="notes")
             yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
                 value=self.task_data.get("priority", "white"),
