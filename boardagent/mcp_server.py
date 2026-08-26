@@ -1,11 +1,17 @@
 """MCP server — thin adapter over the service layer.
 
 Uses the official Python MCP SDK (lowlevel Server) with stdio transport.
+
+Auth: if the BOARDAGENT_API_KEY environment variable is set, the server
+requires that key to exist in ~/.boardagent/keys.json and enforces its role
+per tool (read < write < admin). Without the env var, the server runs
+unauthenticated (local default).
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 from datetime import datetime
 from typing import Any
 
@@ -14,6 +20,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
 from . import __version__
+from .config import (
+    ROLE_ADMIN,
+    ROLE_READ,
+    ROLE_WRITE,
+    load_api_keys,
+    load_server_settings,
+)
 from .models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskUpdate
 from .service import (
     AlreadyClaimedError,
@@ -22,6 +35,8 @@ from .service import (
     BoardAgentError,
     TaskService,
 )
+
+ROLE_RANK = {ROLE_READ: 1, ROLE_WRITE: 2, ROLE_ADMIN: 3}
 
 
 def _to_json(obj: Any) -> str:
@@ -41,7 +56,7 @@ def _tool(name: str, description: str, schema: dict[str, Any]) -> types.Tool:
 TOOLS = [
     _tool(
         "boardagent_create_task",
-        "Create a new task. Priority is a color: red/orange/yellow/green/blue/white.",
+        "Create a new task. Priority is a color: red/orange/yellow/green/blue/white. Requires write role.",
         {
             "type": "object",
             "properties": {
@@ -67,7 +82,7 @@ TOOLS = [
     ),
     _tool(
         "boardagent_list_tasks",
-        "List tasks, optionally filtered.",
+        "List tasks, optionally filtered. Requires read role.",
         {
             "type": "object",
             "properties": {
@@ -79,7 +94,7 @@ TOOLS = [
     ),
     _tool(
         "boardagent_get_task",
-        "Read a single task by id.",
+        "Read a single task by id. Requires read role.",
         {
             "type": "object",
             "properties": {"id": {"type": "integer"}},
@@ -88,7 +103,7 @@ TOOLS = [
     ),
     _tool(
         "boardagent_update_task",
-        "Update a task. Metadata is merged into agent_id's namespace.",
+        "Update a task. Metadata is merged into agent_id's namespace. Requires write role.",
         {
             "type": "object",
             "properties": {
@@ -107,7 +122,7 @@ TOOLS = [
     ),
     _tool(
         "boardagent_delete_task",
-        "Delete a task by id.",
+        "Delete a task by id. Requires admin role.",
         {
             "type": "object",
             "properties": {"id": {"type": "integer"}},
@@ -116,7 +131,7 @@ TOOLS = [
     ),
     _tool(
         "boardagent_claim_task",
-        "Claim/lock a todo task for an agent. Returns an error if unavailable.",
+        "Claim/lock a todo task for an agent. Returns an error if unavailable. Requires write role.",
         {
             "type": "object",
             "properties": {
@@ -128,7 +143,7 @@ TOOLS = [
     ),
     _tool(
         "boardagent_complete_task",
-        "Mark a task done. Only the owning agent may complete it.",
+        "Mark a task done. Only the owning agent may complete it. Requires write role.",
         {
             "type": "object",
             "properties": {
@@ -140,9 +155,48 @@ TOOLS = [
     ),
 ]
 
+# Tool name -> minimum role required
+TOOL_ROLES: dict[str, str] = {
+    "boardagent_create_task": ROLE_WRITE,
+    "boardagent_list_tasks": ROLE_READ,
+    "boardagent_get_task": ROLE_READ,
+    "boardagent_update_task": ROLE_WRITE,
+    "boardagent_delete_task": ROLE_ADMIN,
+    "boardagent_claim_task": ROLE_WRITE,
+    "boardagent_complete_task": ROLE_WRITE,
+}
+
+
+def _check_auth() -> str | None:
+    """Return the authenticated role, or None if unauthenticated.
+
+    Raises BoardAgentError if a key was provided but is invalid.
+    """
+    provided = os.environ.get("BOARDAGENT_API_KEY")
+    if not provided:
+        return None
+    keys = load_api_keys()
+    if provided not in keys:
+        raise BoardAgentError("invalid API key")
+    return keys[provided].get("role", ROLE_READ)
+
 
 def create_mcp_server(service: TaskService | None = None) -> Server:
     svc = service or TaskService()
+
+    # Startup gate: refuse to serve if MCP is disabled in settings.
+    settings = load_server_settings()
+    if not settings.get("mcp_enabled", True):
+        raise BoardAgentError("MCP disabled in settings")
+
+    # Resolve auth once at startup.
+    auth_role = _check_auth()
+
+    def _require(required: str) -> None:
+        if auth_role is None:
+            return  # unauthenticated local mode: allow everything
+        if ROLE_RANK.get(auth_role, 0) < ROLE_RANK[required]:
+            raise BoardAgentError("insufficient permissions")
 
     async def on_list_tools(ctx, params):  # noqa: ARG001
         return types.ListToolsResult(tools=TOOLS)
@@ -151,6 +205,8 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
         name = params.name
         args = params.arguments or {}
         try:
+            _require(TOOL_ROLES.get(name, ROLE_READ))
+
             if name == "boardagent_create_task":
                 create = TaskCreate(
                     title=args["title"],

@@ -5,6 +5,7 @@ end-to-end check instead of hand-rolling JSON-RPC.
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -13,22 +14,30 @@ import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from boardagent.config import ROLE_ADMIN, ROLE_READ, generate_api_key, save_api_keys
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.anyio
-@pytest.mark.skipif(
-    sys.platform == "win32" and sys.version_info < (3, 9),
-    reason="stdio MCP smoke test skipped on old Windows",
-)
-async def test_mcp_smoke_create_and_get(tmp_path):
-    test_db = tmp_path / "mcp_test.db"
-    server_params = StdioServerParameters(
+def _server_params(tmp_path, extra_env=None):
+    env = {
+        "PYTHONUNBUFFERED": "1",
+        "BOARDAGENT_DB": str(tmp_path / "mcp_test.db"),
+        "BOARDAGENT_KEYS": str(tmp_path / "keys.json"),
+    }
+    if extra_env:
+        env.update(extra_env)
+    return StdioServerParameters(
         command=sys.executable,
         args=["-m", "boardagent.mcp_server"],
         cwd=str(ROOT),
-        env={"PYTHONUNBUFFERED": "1", "BOARDAGENT_DB": str(test_db)},
+        env=env,
     )
+
+
+@pytest.mark.anyio
+async def test_mcp_smoke_create_and_get(tmp_path):
+    server_params = _server_params(tmp_path)
     async with stdio_client(server_params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
@@ -49,8 +58,6 @@ async def test_mcp_smoke_create_and_get(tmp_path):
                 },
             )
             assert len(result.content) == 1
-            import json
-
             task = json.loads(result.content[0].text)
             assert task["title"] == "MCP smoke task"
             assert task["metadata"]["smoke_agent"]["test"] is True
@@ -82,3 +89,62 @@ async def test_mcp_smoke_create_and_get(tmp_path):
             )
             complete = json.loads(result.content[0].text)
             assert complete["status"] == "done"
+
+
+@pytest.mark.anyio
+async def test_mcp_auth_roles(tmp_path, monkeypatch):
+    """With BOARDAGENT_API_KEY set, role enforcement applies."""
+    from boardagent import config as cfg
+
+    monkeypatch.setattr(cfg, "data_dir", lambda: tmp_path)
+    admin_key = generate_api_key()
+    read_key = generate_api_key()
+    save_api_keys(
+        {
+            admin_key: {"name": "admin", "role": ROLE_ADMIN},
+            read_key: {"name": "reader", "role": ROLE_READ},
+        }
+    )
+
+    # Read key: can list, cannot create, cannot delete
+    server_params = _server_params(tmp_path, {"BOARDAGENT_API_KEY": read_key})
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool("boardagent_list_tasks", arguments={})
+            assert "error" not in result.content[0].text.lower()
+
+            result = await session.call_tool(
+                "boardagent_create_task", arguments={"title": "nope"}
+            )
+            assert "insufficient permissions" in result.content[0].text
+
+    # Admin key: can create and delete
+    server_params = _server_params(tmp_path, {"BOARDAGENT_API_KEY": admin_key})
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "boardagent_create_task", arguments={"title": "yes"}
+            )
+            task = json.loads(result.content[0].text)
+            assert task["title"] == "yes"
+            result = await session.call_tool(
+                "boardagent_delete_task", arguments={"id": task["id"]}
+            )
+            assert "deleted" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_mcp_invalid_key_rejected(tmp_path, monkeypatch):
+    """An invalid BOARDAGENT_API_KEY fails the server at startup."""
+    from boardagent import config as cfg
+
+    monkeypatch.setattr(cfg, "data_dir", lambda: tmp_path)
+    save_api_keys({})
+
+    server_params = _server_params(tmp_path, {"BOARDAGENT_API_KEY": "ba_bogus"})
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            with pytest.raises(Exception):
+                await session.initialize()

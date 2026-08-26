@@ -7,6 +7,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from boardagent.api import create_app
+from boardagent.config import (
+    ROLE_ADMIN,
+    ROLE_READ,
+    ROLE_WRITE,
+    generate_api_key,
+    save_api_keys,
+    save_server_settings,
+)
 from boardagent.models import Priority, Status, TaskClaim, TaskComplete, TaskCreate, TaskUpdate
 from boardagent.service import (
     AlreadyClaimedError,
@@ -28,8 +36,23 @@ def service(temp_store):
 
 
 @pytest.fixture
-def client(service):
+def keys_file(tmp_path, monkeypatch):
+    """Isolate keys.json in a temp dir and seed an admin key."""
+    from boardagent import config as cfg
+
+    monkeypatch.setattr(cfg, "data_dir", lambda: tmp_path)
+    admin_key = generate_api_key()
+    save_api_keys({admin_key: {"name": "admin", "role": ROLE_ADMIN}})
+    return admin_key
+
+
+@pytest.fixture
+def client(service, keys_file):
     return TestClient(create_app(service))
+
+
+def _auth(key: str) -> dict[str, str]:
+    return {"X-API-Key": key}
 
 
 class TestService:
@@ -96,24 +119,25 @@ class TestAPI:
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
-    def test_create_task(self, client):
+    def test_create_task(self, client, keys_file):
         r = client.post(
             "/tasks",
             json={"title": "API task", "priority": "yellow", "status": "todo"},
+            headers=_auth(keys_file),
         )
         assert r.status_code == 201
         data = r.json()
         assert data["title"] == "API task"
         assert data["priority"] == "yellow"
 
-    def test_list_and_filter(self, client):
-        client.post("/tasks", json={"title": "A", "project": "p1"})
-        client.post("/tasks", json={"title": "B", "project": "p2"})
-        r = client.get("/tasks?project=p1")
+    def test_list_and_filter(self, client, keys_file):
+        client.post("/tasks", json={"title": "A", "project": "p1"}, headers=_auth(keys_file))
+        client.post("/tasks", json={"title": "B", "project": "p2"}, headers=_auth(keys_file))
+        r = client.get("/tasks?project=p1", headers=_auth(keys_file))
         assert r.status_code == 200
         assert r.json()["count"] == 1
 
-    def test_update_metadata(self, client):
+    def test_update_metadata(self, client, keys_file):
         r = client.post(
             "/tasks",
             json={
@@ -121,49 +145,153 @@ class TestAPI:
                 "agent_id": "alpha",
                 "metadata": {"retry": 1},
             },
+            headers=_auth(keys_file),
         )
         tid = r.json()["id"]
         r = client.patch(
             f"/tasks/{tid}",
             json={"agent_id": "alpha", "metadata": {"retry": 2}},
+            headers=_auth(keys_file),
         )
         assert r.status_code == 200
         assert r.json()["metadata"]["alpha"]["retry"] == 2
 
-    def test_claim_409(self, client):
-        r = client.post("/tasks", json={"title": "Lock"})
+    def test_claim_409(self, client, keys_file):
+        r = client.post("/tasks", json={"title": "Lock"}, headers=_auth(keys_file))
         tid = r.json()["id"]
-        r = client.post(f"/tasks/{tid}/claim", json={"agent_id": "a1"})
+        r = client.post(f"/tasks/{tid}/claim", json={"agent_id": "a1"}, headers=_auth(keys_file))
         assert r.status_code == 200
-        r = client.post(f"/tasks/{tid}/claim", json={"agent_id": "a2"})
+        r = client.post(f"/tasks/{tid}/claim", json={"agent_id": "a2"}, headers=_auth(keys_file))
         assert r.status_code == 409
 
-    def test_complete_forbidden(self, client):
-        r = client.post("/tasks", json={"title": "Complete"})
+    def test_complete_forbidden(self, client, keys_file):
+        r = client.post("/tasks", json={"title": "Complete"}, headers=_auth(keys_file))
         tid = r.json()["id"]
-        client.post(f"/tasks/{tid}/claim", json={"agent_id": "owner"})
-        r = client.post(f"/tasks/{tid}/complete", json={"agent_id": "other"})
+        client.post(f"/tasks/{tid}/claim", json={"agent_id": "owner"}, headers=_auth(keys_file))
+        r = client.post(f"/tasks/{tid}/complete", json={"agent_id": "other"}, headers=_auth(keys_file))
         assert r.status_code == 403
-        r = client.post(f"/tasks/{tid}/complete", json={"agent_id": "owner"})
+        r = client.post(f"/tasks/{tid}/complete", json={"agent_id": "owner"}, headers=_auth(keys_file))
         assert r.status_code == 200
         assert r.json()["status"] == "done"
 
-    def test_delete(self, client):
-        r = client.post("/tasks", json={"title": "Delete me"})
+    def test_delete(self, client, keys_file):
+        r = client.post("/tasks", json={"title": "Delete me"}, headers=_auth(keys_file))
         tid = r.json()["id"]
-        r = client.delete(f"/tasks/{tid}")
+        r = client.delete(f"/tasks/{tid}", headers=_auth(keys_file))
         assert r.status_code == 204
-        r = client.get(f"/tasks/{tid}")
+        r = client.get(f"/tasks/{tid}", headers=_auth(keys_file))
         assert r.status_code == 404
 
-    def test_validation(self, client):
-        r = client.post("/tasks", json={"title": ""})
+    def test_validation(self, client, keys_file):
+        r = client.post("/tasks", json={"title": ""}, headers=_auth(keys_file))
         assert r.status_code == 422
 
 
+class TestAuth:
+    def test_no_key_rejected(self, client):
+        r = client.get("/tasks")
+        assert r.status_code == 401
+        r = client.post("/tasks", json={"title": "x"})
+        assert r.status_code == 401
+
+    def test_bad_key_rejected(self, client):
+        r = client.get("/tasks", headers=_auth("ba_wrong"))
+        assert r.status_code == 401
+
+    def test_read_key_cannot_write(self, client, keys_file, tmp_path):
+        from boardagent import config as cfg
+
+        read_key = generate_api_key()
+        save_api_keys(
+            {
+                keys_file: {"name": "admin", "role": ROLE_ADMIN},
+                read_key: {"name": "reader", "role": ROLE_READ},
+            }
+        )
+        # read is fine
+        r = client.get("/tasks", headers=_auth(read_key))
+        assert r.status_code == 200
+        # write is forbidden
+        r = client.post("/tasks", json={"title": "nope"}, headers=_auth(read_key))
+        assert r.status_code == 403
+        # admin endpoints forbidden
+        r = client.get("/keys", headers=_auth(read_key))
+        assert r.status_code == 403
+
+    def test_write_key_cannot_admin(self, client, keys_file):
+        from boardagent import config as cfg
+
+        write_key = generate_api_key()
+        save_api_keys(
+            {
+                keys_file: {"name": "admin", "role": ROLE_ADMIN},
+                write_key: {"name": "writer", "role": ROLE_WRITE},
+            }
+        )
+        r = client.post("/tasks", json={"title": "ok"}, headers=_auth(write_key))
+        assert r.status_code == 201
+        r = client.delete("/tasks/1", headers=_auth(write_key))
+        assert r.status_code == 403
+        r = client.get("/keys", headers=_auth(write_key))
+        assert r.status_code == 403
+
+    def test_admin_can_delete(self, client, keys_file):
+        r = client.post("/tasks", json={"title": "doomed"}, headers=_auth(keys_file))
+        tid = r.json()["id"]
+        r = client.delete(f"/tasks/{tid}", headers=_auth(keys_file))
+        assert r.status_code == 204
+
+
+class TestSettingsAndKeys:
+    def test_get_settings(self, client, keys_file):
+        r = client.get("/settings", headers=_auth(keys_file))
+        assert r.status_code == 200
+        data = r.json()
+        assert data["api_enabled"] is True
+        assert data["mcp_enabled"] is True
+
+    def test_put_settings_requires_admin(self, client, keys_file):
+        r = client.put(
+            "/settings",
+            json={"host": "0.0.0.0", "port": 9999, "api_enabled": False, "mcp_enabled": True},
+            headers=_auth(keys_file),
+        )
+        assert r.status_code == 200
+        assert r.json()["port"] == 9999
+
+    def test_create_list_delete_key(self, client, keys_file):
+        r = client.post(
+            "/keys", json={"name": "agent-1", "role": "write"}, headers=_auth(keys_file)
+        )
+        assert r.status_code == 201
+        new_key = r.json()["key"]
+        assert new_key.startswith("ba_")
+        assert r.json()["role"] == "write"
+
+        r = client.get("/keys", headers=_auth(keys_file))
+        assert r.status_code == 200
+        keys = r.json()
+        assert any(k["key"] == new_key for k in keys)
+
+        r = client.delete(f"/keys/{new_key}", headers=_auth(keys_file))
+        assert r.status_code == 204
+        r = client.get("/keys", headers=_auth(keys_file))
+        assert not any(k["key"] == new_key for k in r.json())
+
+    def test_new_key_works_with_role(self, client, keys_file):
+        r = client.post(
+            "/keys", json={"name": "reader-2", "role": "read"}, headers=_auth(keys_file)
+        )
+        read_key = r.json()["key"]
+        r = client.get("/tasks", headers=_auth(read_key))
+        assert r.status_code == 200
+        r = client.post("/tasks", json={"title": "x"}, headers=_auth(read_key))
+        assert r.status_code == 403
+
+
 class TestPriorityColor:
-    def test_priority_enum_roundtrip(self, client):
+    def test_priority_enum_roundtrip(self, client, keys_file):
         for color in ["red", "orange", "yellow", "green", "blue", "white"]:
-            r = client.post("/tasks", json={"title": f"c-{color}", "priority": color})
+            r = client.post("/tasks", json={"title": f"c-{color}", "priority": color}, headers=_auth(keys_file))
             assert r.status_code == 201, color
             assert r.json()["priority"] == color

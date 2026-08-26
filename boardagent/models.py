@@ -24,6 +24,32 @@ class Status(str, Enum):
     DONE = "done"
 
 
+class Role(str, Enum):
+    """API key permission level."""
+
+    READ = "read"
+    WRITE = "write"
+    ADMIN = "admin"
+
+
+class ApiKeyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    role: Role = Role.READ
+
+
+class ApiKey(BaseModel):
+    key: str
+    name: str
+    role: Role
+
+
+class ServerSettings(BaseModel):
+    host: str = Field(default="127.0.0.1", max_length=255)
+    port: int = Field(default=7373, ge=1, le=65535)
+    api_enabled: bool = True
+    mcp_enabled: bool = True
+
+
 class TaskBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
