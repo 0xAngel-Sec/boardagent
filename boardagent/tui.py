@@ -137,6 +137,33 @@ def _api_headers() -> dict[str, str]:
     return {API_KEY_HEADER: _load_console_key()}
 
 
+def _apply_opacity(opacity: int) -> None:
+    """Apply window opacity to the console window (Windows only).
+
+    Uses SetLayeredWindowAttributes with LWA_ALPHA on the console window
+    handle. Requires WS_EX_LAYERED on the window first.
+    """
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        GWL_EXSTYLE = -20
+        WS_EX_LAYERED = 0x00080000
+        LWA_ALPHA = 0x2
+
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+        user32 = ctypes.windll.user32
+        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED)
+        alpha = max(0, min(100, int(opacity))) * 255 // 100
+        user32.SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)
+    except Exception:
+        pass
+
+
 class ServiceUnavailable(Screen):
     """Full-screen notice when the background service is unreachable."""
 
@@ -352,6 +379,8 @@ class BoardAgentApp(App):
         self.title = f"BoardAgent {__version__}"
         self._register_themes()
         self.apply_theme(self.active_theme)
+        # Apply persisted opacity to the console window immediately.
+        _apply_opacity(int(self.settings.get("opacity", 100)))
         # Reactive attributes must be set AFTER compose (on_mount) — their
         # watchers query widgets, which don't exist during __init__.
         self.ai_mode = bool(self.settings.get("ai_mode", False))
@@ -937,8 +966,9 @@ class BoardAgentApp(App):
             _save_settings(self.settings)
             self.apply_theme(str(theme))
             self.ai_mode = bool(ai_mode)
+            _apply_opacity(opacity_int)
             await self._save_backend_settings()
-            self.notify("Settings saved. Restart TUI for opacity to take effect.")
+            self.notify("Settings saved. Opacity applied.")
         elif bid == "btn-claim":
             await self.action_claim()
         elif bid == "btn-complete":
@@ -959,6 +989,19 @@ class BoardAgentApp(App):
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "theme-select":
             self.apply_theme(str(event.value))
+            # Auto-save so closing without pressing Save keeps the theme.
+            self.settings["theme"] = str(event.value)
+            _save_settings(self.settings)
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        # Auto-save opacity as it's typed (clamped on save).
+        if event.input.id == "opacity-input":
+            try:
+                val = max(0, min(100, int(event.value)))
+            except ValueError:
+                return
+            self.settings["opacity"] = val
+            _save_settings(self.settings)
 
     def on_click(self, event) -> None:
         """Click a keybind value (hover-highlighted) to change it."""
@@ -997,9 +1040,19 @@ class BoardAgentApp(App):
                 if (
                     tabs.active == "settings"
                     and focused is not None
-                    and not isinstance(focused, DataTable)
                     and not isinstance(focused, SelectOverlay)
                 ):
+                    # Keys table: let the cursor move within the table, but
+                    # when it's at the edge (e.g. a single key row), move
+                    # focus out so arrows never feel dead.
+                    if isinstance(focused, DataTable) and focused.id == "keys-table":
+                        if event.key == "down" and focused.cursor_row < len(focused.rows) - 1:
+                            return  # let the table move its cursor
+                        if event.key == "up" and focused.cursor_row > 0:
+                            return
+                        # at the edge — fall through to focus movement
+                    elif isinstance(focused, DataTable):
+                        return  # other tables keep native behavior
                     if event.key == "down":
                         self.screen.focus_next()
                     else:
