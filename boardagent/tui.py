@@ -336,6 +336,16 @@ class KeysTable(DataTable):
         super().__init__(*args, **kwargs)
         self.pending_entry: tuple[str, float] | None = None
 
+    def _on_mouse_move(self, event) -> None:
+        """Mouse hover is intentionally DEAD for the keys table.
+
+        No preview highlight, no cursor movement. Textual's stock hover
+        paint made the mouse-following row look like a selection while the
+        real selection (the cursor) sat elsewhere — "it chooses the last
+        one hovered". Terminal style: the ONLY selection visual is the
+        cursor row (arrows or click). The mouse should not imply anything.
+        """
+
     def action_cursor_up(self) -> None:
         if self.pending_entry:
             direction, ts = self.pending_entry
