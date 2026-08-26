@@ -98,6 +98,30 @@ class ThemeManager:
 THEME = ThemeManager()
 
 
+def _mask_key(key: str) -> str:
+    """Mask an API key for display: first 3 + last 3 chars only.
+
+    The full key never appears in the table; the only place it is ever
+    shown is the post-creation modal, and only until you click away.
+    """
+    if len(key) <= 6:
+        return key
+    return f"{key[:3]}…{key[-3:]}"
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    """Copy text to the Windows clipboard (clip.exe reads stdin)."""
+    import subprocess
+
+    try:
+        subprocess.run(
+            ["clip"], input=text.encode("utf-8"), check=True, timeout=5
+        )
+        return True
+    except Exception:
+        return False
+
+
 def _load_settings() -> dict[str, Any]:
     path = settings_path()
     if path.exists():
@@ -1206,9 +1230,8 @@ class BoardAgentApp(App):
         # after creating a key, etc.).
         selected_key = None
         if table.cursor_row is not None and table.row_count:
-            row = table.get_row_at(table.cursor_row)
-            if row:
-                selected_key = row[2]
+            row_key = list(table.rows)[table.cursor_row]
+            selected_key = getattr(row_key, "value", None)
         pinned = getattr(table, "pinned_key", None)
         for key in list(table.rows):
             table.remove_row(key)
@@ -1220,7 +1243,7 @@ class BoardAgentApp(App):
             table.add_row(
                 name,
                 k.get("role", ""),
-                k.get("key", ""),
+                _mask_key(k.get("key", "")),
                 key=k.get("key", ""),
             )
         # If the pinned key still exists, put the cursor on it (the pin and
@@ -1228,9 +1251,8 @@ class BoardAgentApp(App):
         if pinned and pinned not in {k.get("key") for k in self.api_keys}:
             table.pinned_key = None
         if selected_key is not None:
-            for idx in range(table.row_count):
-                row = table.get_row_at(idx)
-                if row and row[2] == selected_key:
+            for idx, row_key in enumerate(table.rows):
+                if getattr(row_key, "value", None) == selected_key:
                     table.move_cursor(row=idx, column=0)
                     break
 
@@ -1259,16 +1281,18 @@ class BoardAgentApp(App):
         # The PIN is the selection: deleting acts on the pinned key even if
         # the cursor has been arrowed elsewhere (e.g. up to the Delete
         # button). Falls back to the cursor row when nothing is pinned.
+        # Row keys carry the FULL key (the cell shows only the mask).
         key = None
         if getattr(table, "pinned_key", None):
             key = table.pinned_key
         elif table.cursor_row is not None and table.row_count:
-            key = table.get_row_at(table.cursor_row)[2]
+            row_key = list(table.rows)[table.cursor_row]
+            key = getattr(row_key, "value", None)
         if not key:
             self.notify("Select a key first.", severity="warning")
             return
         self.push_screen(
-            ConfirmScreen(f"Delete API key {key[:12]}...?"),
+            ConfirmScreen(f"Delete API key {_mask_key(key)}?"),
             callback=lambda ok: asyncio.create_task(self._delete_key(key, ok)),
         )
 
@@ -1529,11 +1553,66 @@ class CreateKeyScreen(ArrowNavScreen):
             )
             r.raise_for_status()
             key = r.json()
-            self.app.notify(f"Key created: {key['key']}")
-            await self.app.refresh_settings_tab()
             self.app.pop_screen()
+            self.app.push_screen(KeyCreatedScreen(key["key"], key.get("name", "")))
+            await self.app.refresh_settings_tab()
         except Exception as exc:
             self.app.notify(f"Create key failed: {exc}", severity="error")
+
+
+class KeyCreatedScreen(ArrowNavScreen):
+    """One-time full-key reveal after creation.
+
+    The full key is shown ONLY here, and only until you dismiss or click
+    away — after that it is masked in the table (first 3 + last 3 chars)
+    and unrecoverable from the UI. Copy it now or lose it.
+    """
+
+    CSS = """
+    KeyCreatedScreen { align: center middle; }
+    #dialog { width: 72; height: auto; border: solid $primary; padding: 1 2; }
+    #key-value { padding: 1 1; background: $boost; border: round $primary; }
+    #key-hint { color: $text-muted; }
+    """
+
+    def __init__(self, key: str, key_name: str) -> None:
+        super().__init__()
+        self.key = key
+        self.key_name = key_name
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(f"[b]Key created: {self.key_name}[/b]")
+            yield Label("This is the ONLY time the full key is shown.", classes="settings-label")
+            yield Static(self.key, id="key-value")
+            yield Label(
+                "[dim]After you close this window the key is masked\n"
+                "(first 3 … last 3 characters) and cannot be\n"
+                "recovered from the UI. Copy it now or delete\n"
+                "the key and create a new one.[/dim]",
+                id="key-hint",
+            )
+            with Horizontal(id="field-actions"):
+                yield Button("Copy to Clipboard", id="copy")
+                yield Button("Done", id="done")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "copy":
+            if _copy_to_clipboard(self.key):
+                self.app.notify("Key copied to clipboard")
+            else:
+                self.app.notify("Copy failed — select the key text manually", severity="error")
+        else:
+            self.app.pop_screen()
+
+    def _on_key(self, event) -> None:
+        """Enter/Escape dismiss the reveal (space must keep working for
+        activating the Copy button)."""
+        if event.key in ("enter", "escape"):
+            self.app.pop_screen()
+            event.stop()
+        else:
+            super()._on_key(event)
 
 
 class CreateTaskScreen(ArrowNavScreen):
