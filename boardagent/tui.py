@@ -831,7 +831,7 @@ class BoardAgentApp(App):
                 table.remove_row(key)
 
         # (re)create columns only when the mode's column set changed
-        expected = 11 if self.ai_mode else 9
+        expected = 15 if self.ai_mode else 9
         if len(table.columns) != expected:
             # Removing columns drops the cell data of every existing row
             # (Textual keys cells by column), so rows must be rebuilt too —
@@ -841,7 +841,7 @@ class BoardAgentApp(App):
             for col in list(table.columns):
                 table.remove_column(getattr(col, "key", col))
             if self.ai_mode:
-                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Category", "Status", "Priority", "Project", "Agent", "Metadata")
+                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Category", "Links", "Acceptance", "Dependencies", "Notes", "Status", "Priority", "Project", "Agent", "Metadata")
             else:
                 table.add_columns("Title", "Description", "Tags", "Estimate", "Category", "Status", "Priority", "Project", "Due")
 
@@ -857,6 +857,10 @@ class BoardAgentApp(App):
             category = t.get("category") or ""
             if self.ai_mode:
                 metadata = json.dumps(t.get("metadata", {}))
+                links = ", ".join(t.get("links") or [])[:40]
+                acceptance = (t.get("acceptance_criteria") or "").replace("\n", " ")[:40]
+                deps = ", ".join(t.get("dependencies") or [])[:40]
+                notes = "; ".join(t.get("notes") or [])[:40]
                 table.add_row(
                     str(t["id"]),
                     t["title"],
@@ -864,6 +868,10 @@ class BoardAgentApp(App):
                     tags,
                     estimate,
                     category,
+                    links,
+                    acceptance,
+                    deps,
+                    notes,
                     self._colored(status, f"status-{status}"),
                     self._colored(priority, f"priority-{priority}"),
                     t.get("project") or "",
