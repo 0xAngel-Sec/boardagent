@@ -34,7 +34,8 @@ A theme file looks like this:
 }
 ```
 
-- `name` — the name shown in Settings. Required.
+- `name` — the name shown in Settings. Recommended; if omitted, the
+  filename is used.
 - `colors` — the color settings. Required.
 - `description` — a note for yourself. Optional.
 

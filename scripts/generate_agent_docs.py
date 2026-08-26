@@ -23,22 +23,8 @@ def dump_openapi_docs(spec: dict) -> None:
     AGENT_DOCS.mkdir(parents=True, exist_ok=True)
     (AGENT_DOCS / "openapi.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
     (AGENT_DOCS / "openapi.yaml").write_text(yaml.safe_dump(spec, sort_keys=False), encoding="utf-8")
-
-    md = ["# BoardAgent REST API (agent docs)\n\n"]
-    md.append(f"Base URL: `http://127.0.0.1:7373`\n\n")
-    md.append("## Endpoints\n\n")
-    paths = spec.get("paths", {})
-    for path, methods in sorted(paths.items()):
-        for method, detail in methods.items():
-            md.append(f"### {method.upper()} {path}\n\n")
-            md.append(f"{detail.get('summary', detail.get('description', ''))}\n\n")
-            if "requestBody" in detail:
-                schema = detail["requestBody"]["content"]["application/json"]["schema"]
-                md.append(f"**Request body schema:** `{json.dumps(schema)}`\n\n")
-            for code, resp in detail.get("responses", {}).items():
-                md.append(f"- **{code}**: {resp.get('description', '')}\n")
-            md.append("\n")
-    (AGENT_DOCS / "rest_api.md").write_text("".join(md), encoding="utf-8")
+    # NOTE: rest_api.md is hand-maintained (token-optimized for agents) and
+    # intentionally NOT regenerated here.
 
 
 def dump_mcp_docs() -> None:
@@ -49,14 +35,8 @@ def dump_mcp_docs() -> None:
     (AGENT_DOCS / "mcp_tools.json").write_text(
         json.dumps([t.model_dump() for t in TOOLS], indent=2), encoding="utf-8"
     )
-    md = ["# BoardAgent MCP Tools (agent docs)\n\n"]
-    md.append("Transport: stdio. Command: `boardagent-mcp`\n\n")
-    md.append("## Tools\n\n")
-    for tool in TOOLS:
-        md.append(f"### {tool.name}\n\n")
-        md.append(f"{tool.description}\n\n")
-        md.append(f"```json\n{json.dumps(tool.input_schema, indent=2)}\n```\n\n")
-    (AGENT_DOCS / "mcp_tools.md").write_text("".join(md), encoding="utf-8")
+    # NOTE: mcp_tools.md is hand-maintained (token-optimized for agents) and
+    # intentionally NOT regenerated here.
 
 
 def main() -> None:

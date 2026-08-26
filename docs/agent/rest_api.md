@@ -62,7 +62,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
 - `claim` requires `status==todo` AND `owner_agent_id IS NULL` — atomic, no race.
 - `complete` requires `owner_agent_id == agent_id` and `status != done`.
 - PATCH `status` is guarded: cannot set `in_progress` on unowned task (use claim); cannot move a claimed task to done/blocked/todo unless you are the owner (pass your `agent_id` in the PATCH body; admin bypasses).
-- PATCH status ownership violations → **400** (not 403); 403 is only returned by `/complete`.
+- PATCH status ownership violations → **400** (not 403); among the claim/complete/PATCH path, ownership 403 comes only from `/complete`. (Insufficient role → 403 on any endpoint.)
 - Releasing to `todo` clears the owner.
 
 ## Errors

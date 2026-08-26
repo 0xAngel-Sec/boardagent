@@ -46,6 +46,17 @@ from .service import (
 
 API_KEY_HEADER = "X-API-Key"
 
+# Shared OpenAPI error responses. Referenced by route decorators so the
+# generated spec documents auth/ownership failures accurately and
+# reproducibly (no hand-editing of generated files).
+AUTH_ERRORS = {
+    401: {"description": "Missing or invalid API key"},
+    403: {"description": "Insufficient role or not the owner"},
+}
+NOT_FOUND = {404: {"description": "Task or key not found"}}
+CONFLICT = {409: {"description": "Already claimed / already done"}}
+BAD_REQUEST = {400: {"description": "Bad transition or invalid request"}}
+
 
 def _require_role(required: str):
     """Dependency factory: enforce a minimum API-key role.
@@ -75,7 +86,11 @@ require_admin = _require_role(ROLE_ADMIN)
 def create_app(service: TaskService | None = None) -> FastAPI:
     app = FastAPI(
         title="BoardAgent API",
-        description="Agent-first local task manager REST API.",
+        description=(
+            "BoardAgent local task manager API. All endpoints except /healthz "
+            "require the X-API-Key header (roles: read < write < admin). "
+            "See docs/agent/rest_api.md for the full error table."
+        ),
         version=__version__,
     )
     svc = service or TaskService()
@@ -86,11 +101,11 @@ def create_app(service: TaskService | None = None) -> FastAPI:
 
     # ---- server settings --------------------------------------------------
 
-    @app.get("/settings", response_model=ServerSettings)
+    @app.get("/settings", response_model=ServerSettings, responses={**AUTH_ERRORS})
     async def get_settings(_: str = Depends(require_read)) -> dict[str, Any]:
         return load_server_settings()
 
-    @app.put("/settings", response_model=ServerSettings)
+    @app.put("/settings", response_model=ServerSettings, responses={**AUTH_ERRORS})
     async def put_settings(
         settings: ServerSettings, _: str = Depends(require_admin)
     ) -> dict[str, Any]:
@@ -99,7 +114,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
 
     # ---- API keys ---------------------------------------------------------
 
-    @app.get("/keys", response_model=list[ApiKey])
+    @app.get("/keys", response_model=list[ApiKey], responses={**AUTH_ERRORS})
     async def list_keys(_: str = Depends(require_admin)) -> list[dict[str, Any]]:
         keys = load_api_keys()
         return [
@@ -107,7 +122,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
             for key, info in keys.items()
         ]
 
-    @app.post("/keys", response_model=ApiKey, status_code=201)
+    @app.post("/keys", response_model=ApiKey, status_code=201, responses={**AUTH_ERRORS})
     async def create_key(
         create: ApiKeyCreate, _: str = Depends(require_admin)
     ) -> dict[str, Any]:
@@ -117,7 +132,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         save_api_keys(keys)
         return {"key": key, "name": create.name, "role": create.role}
 
-    @app.delete("/keys/{key}", status_code=204)
+    @app.delete("/keys/{key}", status_code=204, responses={**AUTH_ERRORS, **NOT_FOUND})
     async def delete_key(key: str, _: str = Depends(require_admin)) -> JSONResponse:
         keys = load_api_keys()
         if key not in keys:
@@ -128,13 +143,13 @@ def create_app(service: TaskService | None = None) -> FastAPI:
 
     # ---- tasks ------------------------------------------------------------
 
-    @app.post("/tasks", response_model=Task, status_code=201)
+    @app.post("/tasks", response_model=Task, status_code=201, responses={**AUTH_ERRORS})
     async def create_task(
         task: TaskCreate, _: str = Depends(require_write)
     ) -> dict[str, Any]:
         return _serialize(svc.create_task(task))
 
-    @app.get("/tasks", response_model=TaskList)
+    @app.get("/tasks", response_model=TaskList, responses={**AUTH_ERRORS})
     async def list_tasks(
         status: Status | None = None,
         project: str | None = None,
@@ -148,7 +163,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         )
         return {"tasks": [_serialize(t) for t in tasks], "count": len(tasks)}
 
-    @app.get("/tasks/{task_id}", response_model=Task)
+    @app.get("/tasks/{task_id}", response_model=Task, responses={**AUTH_ERRORS, **NOT_FOUND})
     async def get_task(
         task_id: int, _: str = Depends(require_read)
     ) -> dict[str, Any]:
@@ -157,7 +172,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found")
         return _serialize(task)
 
-    @app.patch("/tasks/{task_id}", response_model=Task)
+    @app.patch("/tasks/{task_id}", response_model=Task, responses={**AUTH_ERRORS, **NOT_FOUND, **BAD_REQUEST})
     async def update_task(
         task_id: int,
         update: TaskUpdate,
@@ -171,7 +186,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found")
         return _serialize(task)
 
-    @app.delete("/tasks/{task_id}", status_code=204)
+    @app.delete("/tasks/{task_id}", status_code=204, responses={**AUTH_ERRORS, **NOT_FOUND})
     async def delete_task(
         task_id: int, _: str = Depends(require_admin)
     ) -> JSONResponse:
@@ -179,7 +194,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="task not found")
         return JSONResponse(status_code=204, content={})
 
-    @app.post("/tasks/{task_id}/claim", response_model=Task)
+    @app.post("/tasks/{task_id}/claim", response_model=Task, responses={**AUTH_ERRORS, **NOT_FOUND, **CONFLICT})
     async def claim_task(
         task_id: int, claim: TaskClaim, _: str = Depends(require_write)
     ) -> dict[str, Any]:
@@ -190,7 +205,7 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         except BoardAgentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.post("/tasks/{task_id}/complete", response_model=Task)
+    @app.post("/tasks/{task_id}/complete", response_model=Task, responses={**AUTH_ERRORS, **NOT_FOUND, **CONFLICT})
     async def complete_task(
         task_id: int,
         complete: TaskComplete,
@@ -205,11 +220,11 @@ def create_app(service: TaskService | None = None) -> FastAPI:
         except BoardAgentError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get("/tasks/schema/priority")
+    @app.get("/tasks/schema/priority", responses={**AUTH_ERRORS})
     async def priority_values(_: str = Depends(require_read)) -> list[str]:
         return [p.value for p in Priority]
 
-    @app.get("/tasks/schema/status")
+    @app.get("/tasks/schema/status", responses={**AUTH_ERRORS})
     async def status_values(_: str = Depends(require_read)) -> list[str]:
         return [s.value for s in Status]
 

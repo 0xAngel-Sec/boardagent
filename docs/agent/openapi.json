@@ -32,7 +32,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -57,6 +57,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -65,26 +71,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -96,7 +82,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -131,6 +117,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -139,26 +131,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -172,7 +144,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -201,6 +173,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -209,26 +187,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -240,7 +198,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -275,6 +233,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -283,26 +247,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -325,7 +269,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -343,6 +287,15 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
+          "404": {
+            "description": "Task or key not found"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -351,26 +304,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -384,7 +317,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -419,6 +352,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -427,26 +366,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -535,7 +454,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -560,6 +479,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -568,26 +493,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -610,7 +515,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -635,6 +540,15 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
+          "404": {
+            "description": "Task or key not found"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -643,26 +557,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -683,7 +577,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -718,6 +612,18 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
+          "404": {
+            "description": "Task or key not found"
+          },
+          "400": {
+            "description": "Bad transition or invalid request"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -726,26 +632,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -766,7 +652,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -784,6 +670,15 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
+          "404": {
+            "description": "Task or key not found"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -792,26 +687,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -834,7 +709,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -869,6 +744,18 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
+          "404": {
+            "description": "Task or key not found"
+          },
+          "409": {
+            "description": "Already claimed / already done"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -877,26 +764,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -919,7 +786,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -954,6 +821,18 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
+          "404": {
+            "description": "Task or key not found"
+          },
+          "409": {
+            "description": "Already claimed / already done"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -962,26 +841,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -995,7 +854,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -1024,6 +883,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1032,26 +897,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }
@@ -1065,7 +910,7 @@
           {
             "name": "x-api-key",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "anyOf": [
                 {
@@ -1094,6 +939,12 @@
               }
             }
           },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "403": {
+            "description": "Insufficient role or not the owner"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1102,26 +953,6 @@
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            }
-          },
-          "401": {
-            "description": {
-              "description": "Missing or invalid API key"
-            }
-          },
-          "403": {
-            "description": {
-              "description": "Insufficient role or not the owner"
-            }
-          },
-          "404": {
-            "description": {
-              "description": "Task or key not found"
-            }
-          },
-          "409": {
-            "description": {
-              "description": "Already claimed / already done"
             }
           }
         }

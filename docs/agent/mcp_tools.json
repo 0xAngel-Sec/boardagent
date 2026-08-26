@@ -1,8 +1,9 @@
 [
   {
     "name": "boardagent_create_task",
+    "title": null,
     "description": "Create a new task. Priority is a color: red/orange/yellow/green/blue/white. Requires write role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "title": {
@@ -93,12 +94,18 @@
       "required": [
         "title"
       ]
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   },
   {
     "name": "boardagent_list_tasks",
+    "title": null,
     "description": "List tasks, optionally filtered. Requires read role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "status": {
@@ -125,12 +132,18 @@
           "description": "Skip N rows"
         }
       }
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   },
   {
     "name": "boardagent_get_task",
+    "title": null,
     "description": "Read a single task by id. Requires read role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "id": {
@@ -140,12 +153,18 @@
       "required": [
         "id"
       ]
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   },
   {
     "name": "boardagent_update_task",
+    "title": null,
     "description": "Update a task. Metadata is merged into agent_id's namespace. Requires write role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "id": {
@@ -227,12 +246,18 @@
       "required": [
         "id"
       ]
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   },
   {
     "name": "boardagent_delete_task",
+    "title": null,
     "description": "Delete a task by id. Requires admin role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "id": {
@@ -242,12 +267,18 @@
       "required": [
         "id"
       ]
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   },
   {
     "name": "boardagent_claim_task",
+    "title": null,
     "description": "Claim/lock a todo task for an agent. Returns an error if unavailable. Requires write role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "id": {
@@ -261,12 +292,18 @@
         "id",
         "agent_id"
       ]
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   },
   {
     "name": "boardagent_complete_task",
+    "title": null,
     "description": "Mark a task done. Only the owning agent may complete it. Requires write role.",
-    "inputSchema": {
+    "input_schema": {
       "type": "object",
       "properties": {
         "id": {
@@ -280,6 +317,11 @@
         "id",
         "agent_id"
       ]
-    }
+    },
+    "execution": null,
+    "output_schema": null,
+    "icons": null,
+    "annotations": null,
+    "meta": null
   }
 ]
