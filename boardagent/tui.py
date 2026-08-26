@@ -185,15 +185,15 @@ class TaskTable(DataTable):
         self.zebra_stripes = True
 
 
-class SettingsSelect(Select):
+class SettingsSelect(Select, inherit_bindings=False):
     """Select that only opens its overlay on SPACE.
 
     Textual's Select binds enter/down/up/space to show_overlay, which makes
     arrow-key navigation through the settings page open the dropdown instead
-    of moving. _inherit_bindings=False drops the base bindings entirely.
+    of moving. inherit_bindings=False (class keyword — a plain class
+    attribute gets overwritten by __init_subclass__) drops the base
+    bindings entirely.
     """
-
-    _inherit_bindings = False
 
     BINDINGS = [
         ("space", "show_overlay", "Select"),
@@ -220,6 +220,11 @@ class ConfirmScreen(Screen[bool]):
             with Horizontal(id="dialog-buttons"):
                 yield Button("Yes", id="yes")
                 yield Button("No", id="no")
+
+    BINDINGS = [
+        ("left,up", "app.focus_previous", "Previous"),
+        ("right,down", "app.focus_next", "Next"),
+    ]
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "yes")
@@ -984,11 +989,16 @@ class BoardAgentApp(App):
             try:
                 tabs = self.query_one(TabbedContent)
                 # DataTables (keys table) handle up/down natively for cursor
-                # movement — don't hijack them.
+                # movement — don't hijack them. Also skip when a Select
+                # overlay is open (focused widget is the overlay, not a
+                # settings field).
+                from textual.widgets._select import SelectOverlay
+
                 if (
                     tabs.active == "settings"
                     and focused is not None
                     and not isinstance(focused, DataTable)
+                    and not isinstance(focused, SelectOverlay)
                 ):
                     if event.key == "down":
                         self.screen.focus_next()
@@ -1061,16 +1071,18 @@ class EditTaskScreen(Screen):
 
     def __init__(self, task: dict[str, Any]) -> None:
         super().__init__()
-        self.task = task
+        # NOTE: cannot be named self.task — Textual's Screen base class
+        # defines `task` as a read-only property (message pump bookkeeping).
+        self.task_data = task
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Label(f"[b]Edit #{self.task['id']}[/b]")
-            yield Input(value=self.task.get("title", ""), id="title")
-            yield Input(value=self.task.get("project") or "", id="project")
+            yield Label(f"[b]Edit #{self.task_data['id']}[/b]")
+            yield Input(value=self.task_data.get("title", ""), id="title")
+            yield Input(value=self.task_data.get("project") or "", id="project")
             yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
-                value=self.task.get("priority", "white"),
+                value=self.task_data.get("priority", "white"),
                 id="priority",
                 allow_blank=False,
             )
@@ -1090,7 +1102,7 @@ class EditTaskScreen(Screen):
         try:
             r = await asyncio.to_thread(
                 httpx.patch,
-                f"{_api_base()}/tasks/{self.task['id']}",
+                f"{_api_base()}/tasks/{self.task_data['id']}",
                 json={"title": title, "project": project, "priority": priority},
                 headers=_api_headers(),
                 timeout=5.0,
