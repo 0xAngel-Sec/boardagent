@@ -175,10 +175,39 @@ class ServiceUnavailable(Screen):
 class TaskTable(DataTable):
     """Task list table."""
 
+    BINDINGS = [
+        ("space", "select_cursor", "Select"),
+    ]
+
     def __init__(self, ai_mode: bool = False, **kwargs) -> None:
         super().__init__(show_cursor=True, cursor_type="row", **kwargs)
         self.ai_mode = ai_mode
         self.zebra_stripes = True
+
+
+class ConfirmScreen(Screen[bool]):
+    """Modal yes/no confirmation (Textual 8 removed App.confirm)."""
+
+    CSS = """
+    ConfirmScreen { align: center middle; }
+    #dialog { width: 60; height: auto; border: solid $primary; padding: 1 2; }
+    #dialog-buttons { height: 3; align-horizontal: center; }
+    #dialog-buttons Button { margin: 0 2; }
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__()
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self.message)
+            with Horizontal(id="dialog-buttons"):
+                yield Button("Yes", id="yes")
+                yield Button("No", id="no")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "yes")
 
 
 class KeyCaptureScreen(Screen):
@@ -244,6 +273,7 @@ class BoardAgentApp(App):
 
     BINDINGS = [
         ("q", "quit", "Quit"),
+        ("escape", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
         ("a", "toggle_ai", "AI mode"),
         ("c", "create", "Create"),
@@ -289,6 +319,8 @@ class BoardAgentApp(App):
             new_map._add_binding(
                 Binding(k, act, ACTION_LABELS.get(act, act), show=True)
             )
+        # Escape always quits (hard binding, not user-rebindable).
+        new_map._add_binding(Binding("escape", "quit", "Quit", show=True))
         # Preserve the command palette binding (added by App at init).
         for key_, binding in self._bindings:
             if binding.action in ("command_palette", "app.command_palette"):
@@ -307,6 +339,11 @@ class BoardAgentApp(App):
         await self.action_refresh()
         asyncio.create_task(self.refresh_settings_tab())
         self.set_interval(10, self.action_refresh)
+        # Focus the task table so arrows/enter/space work immediately.
+        try:
+            self.query_one(TaskTable).focus()
+        except Exception:
+            pass
 
     def _register_themes(self) -> None:
         """Register every BoardAgent theme as a Textual Theme."""
@@ -596,7 +633,13 @@ class BoardAgentApp(App):
         if task is None:
             self.notify("Select a task first.", severity="warning")
             return
-        if not await self.confirm(f"Delete task #{task['id']} \"{task['title']}\"?"):
+        self.push_screen(
+            ConfirmScreen(f"Delete task #{task['id']} \"{task['title']}\"?"),
+            callback=lambda ok: asyncio.create_task(self._delete_task(task, ok)),
+        )
+
+    async def _delete_task(self, task: dict[str, Any], confirmed: bool) -> None:
+        if not confirmed:
             return
         try:
             r = await asyncio.to_thread(
@@ -662,16 +705,7 @@ class BoardAgentApp(App):
             pass
         self.notify(f"{ACTION_LABELS.get(action, action)}: {key}")
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        # Only the task table drives the detail panel. The keys table in
-        # Settings is also a DataTable — its row keys are API key strings,
-        # not task ids, and int() would crash the app.
-        if event.data_table.id != "task-list":
-            return
-        self.selected_task_id = int(event.row_key.value)
-        task = self._selected_task()
-        if task is None:
-            return
+    def _update_detail(self, task: dict[str, Any]) -> None:
         detail = self.query_one("#detail-content", Static)
         colors = self.theme_colors
         status = task.get("status", "todo")
@@ -700,6 +734,28 @@ class BoardAgentApp(App):
             ("btn-delete", True),
         ):
             self.query_one(f"#{bid}", Button).disabled = not enabled
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        # Only the task table drives the detail panel. The keys table in
+        # Settings is also a DataTable — its row keys are API key strings,
+        # not task ids, and int() would crash the app.
+        if event.data_table.id != "task-list":
+            return
+        self.selected_task_id = int(event.row_key.value)
+        task = self._selected_task()
+        if task is None:
+            return
+        self._update_detail(task)
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Live preview: update the detail panel as the cursor moves."""
+        if event.data_table.id != "task-list":
+            return
+        self.selected_task_id = int(event.row_key.value)
+        task = self._selected_task()
+        if task is None:
+            return
+        self._update_detail(task)
 
     # ---- settings tab ------------------------------------------------------
 
@@ -793,7 +849,13 @@ class BoardAgentApp(App):
         key = table.get_row_at(table.cursor_row)[2]
         if not key:
             return
-        if not await self.confirm(f"Delete API key {key[:12]}...?"):
+        self.push_screen(
+            ConfirmScreen(f"Delete API key {key[:12]}...?"),
+            callback=lambda ok: asyncio.create_task(self._delete_key(key, ok)),
+        )
+
+    async def _delete_key(self, key: str, confirmed: bool) -> None:
+        if not confirmed:
             return
         try:
             r = await asyncio.to_thread(
