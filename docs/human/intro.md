@@ -1,32 +1,104 @@
-# Why BoardAgent?
+# BoardAgent — a task board for you and your AI agents
 
-BoardAgent is a Todoist-style task manager built for AI agents first. Humans get a fast terminal UI, but the real users are agents: they can create tasks, attach arbitrary metadata, claim work, and complete it through a clean REST API or MCP server.
+BoardAgent is a task manager that lives on your computer. You use it like
+a normal to-do list. The difference: AI agents (Claude, Cursor, Hermes)
+can see the same board, pick up tasks, and mark them done — without you
+copy-pasting anything between tools.
 
-It is local-first, free forever, and owns your data in a single SQLite file.
+Everything stays on your machine. No account, no cloud, no subscription.
+Your tasks live in a single file on your disk.
 
-## Key ideas
+## What you see
 
-- **One source of truth.** All task logic lives in the FastAPI service. The MCP server and TUI are thin wrappers.
-- **Agent metadata.** Each agent writes under its own namespace (`metadata.<agent_id>.*`) so agents do not clobber each other.
-- **Color priority.** Red, orange, yellow, green, blue, white — no numeric priority wars.
-- **Claim / complete lifecycle.** An agent claims a `todo` task, which locks it and marks it `in_progress`. Only the owning agent can complete it.
-- **Terminal UI with two modes.** Human mode shows clean task fields. AI mode shows the full metadata blob.
+When you open BoardAgent you get a terminal window with two tabs:
 
-## Quick walkthrough
+- **Tasks** — your task list. Columns: Title, Description, Tags, Estimate,
+  Status, Priority, Project, Due.
+- **Settings** — pick a theme, turn on AI mode, change opacity, set up the
+  server, manage API keys, remap keys.
 
-1. Start the server: `boardagent-server`
-2. Open the TUI: `boardagent`
-3. Press `c` to create a task, `a` to toggle AI mode, `r` to refresh, `q` to quit.
-4. Use the Settings tab to switch between `amber` and `matrix` themes or adjust opacity.
+Press **Tab** to switch between the two tabs.
+
+## 60-second quickstart
+
+1. Start the server (it runs in the background and stores your tasks):
+   `boardagent-server`
+2. Open the task board:
+   `boardagent`
+3. Press **c** to create your first task. Fill in a title, press Enter,
+   and you have a task on the board.
+
+That's it. You now have a working task manager.
+
+## Keyboard basics
+
+You never need the mouse. Here are the keys you will use most:
+
+- **Arrow keys** — move up and down the task list.
+- **Space** — open or select a task.
+- **Enter** — activate the highlighted button or item.
+- **c** — create a new task.
+- **e** — edit the selected task.
+- **d** — delete the selected task.
+- **l** — claim a task (mark it as yours and in progress).
+- **t** — complete the selected task.
+- **r** — refresh the list from the server.
+- **a** — toggle AI mode (see below).
+- **Escape** — close a dialog or go back.
+- **q** — quit.
+
+The mouse works too — click to select, scroll to move — but the keyboard
+is faster once you know the keys.
+
+## Creating a task
+
+Press **c** and you get a form. The fields:
+
+- **Title** — what the task is.
+- **Project** — group tasks under a project name.
+- **Description** — more detail.
+- **Tags** — comma-separated labels (e.g. `bug, urgent`).
+- **Estimate** — how long you think it takes (e.g. `2h`, `1d`).
+- **Links** — comma-separated URLs related to the task.
+- **Acceptance** — what "done" looks like for this task.
+- **Dependencies** — comma-separated IDs of tasks that must finish first.
+- **Notes** — one note per line.
+- **Priority** — a color: white, blue, green, yellow, orange, red (red is
+  highest).
+
+You can also add your own custom fields with **Add Field** (name = value)
+and remove them with **Remove Field**. Only Title is required; everything
+else is optional.
+
+## What is AI mode?
+
+Press **a** to toggle AI mode. The task list grows extra columns that
+matter when agents are working alongside you:
+
+- **ID** — the task's unique identifier (agents use this to refer to tasks).
+- **Links** — related URLs.
+- **Acceptance** — the done-criteria for the task.
+- **Dependencies** — other tasks that must finish first.
+- **Notes** — free-form notes, one per line.
+- **Agent** — which agent (if any) has claimed the task.
+- **Metadata** — extra fields agents attach, shown as key = value pairs.
+
+Turn AI mode on when you want to see what the agents are doing. Turn it
+off for a clean, human-focused view. The choice is saved across restarts.
+
+## Where your data lives
+
+All tasks are stored in a single file on your computer, at
+`~/.boardagent/boardagent.db` (a database file — think of it as a
+spreadsheet that only BoardAgent reads and writes). Nothing leaves your
+machine.
 
 ## Screenshot
 
 ![TUI main screen](screenshots/tui.svg)
 
-## Windows background service
+## Where to go next
 
-The server can be kept running with a scheduled task or a simple wrapper. See `packaging.md` for examples.
-
-## For agents
-
-See `../agent/rest_api.md` and `../agent/mcp_tools.md`.
+- To let an AI agent work on your board, see [mcp.md](mcp.md).
+- To change colors, see [themes.md](themes.md).
+- To run the server in the background on Windows, see [packaging.md](packaging.md).

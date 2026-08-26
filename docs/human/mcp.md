@@ -1,29 +1,46 @@
-# Connecting BoardAgent to an MCP host (Hermes, Claude, Cursor, etc.)
+# Connecting BoardAgent to an AI tool
 
-BoardAgent ships an MCP server (`boardagent-mcp` / `boardagent-mcp.exe`) that
-exposes its 7 task tools over the standard Model Context Protocol (stdio
-transport). Any MCP-compatible host can use it: Hermes Agent, Claude Desktop,
-Cursor, VS Code, etc.
+MCP (Model Context Protocol) is a standard way for AI tools to talk to
+external programs. BoardAgent includes a small MCP server, so an AI tool
+like Claude Desktop, Cursor, or Hermes can read your task board, add
+tasks, claim them, and mark them done — all from inside that tool.
 
-The MCP server talks **directly to the same service layer** as the REST API —
-same SQLite file, same locking, same metadata namespacing. You do not need the
-REST server running for the MCP server to work.
+The MCP server shares the same task file as the app you use, so you and
+the agent always see the same board.
 
-## 1. Get the server
+## 1. Get the MCP server
 
-Either install from source (`pip install -e .` gives you `boardagent-mcp`),
-or use the prebuilt exe in `dist/boardagent-mcp.exe` (no Python needed).
+You need the `boardagent-mcp` program on your computer. You get it
+either by installing BoardAgent from source (`pip install -e .`), or by
+using the prebuilt `boardagent-mcp.exe` in the `dist/` folder (no Python
+needed).
 
-## 2. Add it to your MCP host
+Find the full path to the program. On Windows it is something like:
+
+```
+C:\Users\yourname\Documents\boardagent\dist\boardagent-mcp.exe
+```
+
+Write that path down — you will paste it into your AI tool's config below.
+
+## 2. Add it to your AI tool
+
+Pick the tool you use and add BoardAgent to its config file. After
+saving, restart the tool so it picks up the change.
 
 ### Hermes Agent
 
+Run these commands in a terminal, replacing the path with your real one:
+
 ```bash
-hermes config set mcp_servers.boardagent.command "/absolute/path/to/boardagent-mcp"
+hermes config set mcp_servers.boardagent.command "C:/path/to/boardagent-mcp.exe"
 hermes config set mcp_servers.boardagent.type stdio
-hermes gateway restart        # from a separate terminal
-hermes mcp test boardagent    # verify — should list 7 tools
+hermes gateway restart
+hermes mcp test boardagent
 ```
+
+The last command should list the seven BoardAgent tools. If it does, you
+are connected.
 
 Or edit `config.yaml` directly:
 
@@ -35,7 +52,9 @@ mcp_servers:
     type: stdio
 ```
 
-### Claude Desktop (`claude_desktop_config.json`)
+### Claude Desktop
+
+Open (or create) the file `claude_desktop_config.json` and add:
 
 ```json
 {
@@ -48,7 +67,12 @@ mcp_servers:
 }
 ```
 
-### Cursor (`~/.cursor/mcp.json`)
+On Windows the backslashes in the path must be doubled (`\\`), as shown
+above. Restart Claude Desktop after saving.
+
+### Cursor
+
+Open (or create) `~/.cursor/mcp.json` and add the same block:
 
 ```json
 {
@@ -61,47 +85,59 @@ mcp_servers:
 }
 ```
 
-## 3. Verify
+Restart Cursor after saving.
 
-Ask the host to list tools, or from a shell:
+## 3. Check that it works
+
+The simplest check: open your AI tool and ask it to "list my BoardAgent
+tasks." If it can, the connection works.
+
+You can also check from a terminal:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}' | boardagent-mcp
 ```
 
-You should see the 7 tools:
-`boardagent_create_task`, `boardagent_list_tasks`, `boardagent_get_task`,
-`boardagent_update_task`, `boardagent_delete_task`,
-`boardagent_claim_task`, `boardagent_complete_task`.
+You should see seven tools listed:
 
-## Configuration
+- `boardagent_create_task`
+- `boardagent_list_tasks`
+- `boardagent_get_task`
+- `boardagent_update_task`
+- `boardagent_delete_task`
+- `boardagent_claim_task`
+- `boardagent_complete_task`
 
-The MCP server honors the same environment variables as the REST server:
+## How agents should behave
 
-| Variable          | Default          | Meaning                          |
-|-------------------|------------------|----------------------------------|
-| `BOARDAGENT_DB`   | `~/.boardagent/boardagent.db` | SQLite file (override to use a different board) |
-| `BOARDAGENT_HOST` | `127.0.0.1`      | Used only if the MCP server talks to REST |
-| `BOARDAGENT_PORT` | `7373`           | Used only if the MCP server talks to REST |
+When an agent works on your board it follows a few rules so things stay
+tidy:
 
-**Multiple boards:** run a second MCP server instance with a different
-`BOARDAGENT_DB` and register it under a different name in your host.
+- **Claim before work.** The agent claims a task, which locks it so no
+  other agent grabs the same one.
+- **Complete as the owner.** Only the agent that claimed a task can mark
+  it done.
+- **Namespace metadata.** Each agent stores its extra notes under its
+  own name, so agents never overwrite each other's data.
 
-## Agent conventions
+You do not need to do anything for these rules to apply — they are built
+in.
 
-- **Claim before work.** An agent claims a `todo` task
-  (`boardagent_claim_task`), which locks it. A second agent gets an error.
-- **Namespace your metadata.** Pass `agent_id` with every
-  `boardagent_update_task` call; your fields land under
-  `metadata.<agent_id>.*` and never clobber another agent's fields.
-- **Complete as the owner.** Only the agent that claimed a task can complete it
-  (`boardagent_complete_task`).
+## Running more than one board
+
+If you want a second, separate task board (for example, one for work and
+one for home), set the `BOARDAGENT_DB` environment variable to a
+different file path before starting the MCP server. Each path is its own
+board. Register each one in your AI tool under a different name.
 
 ## Troubleshooting
 
-- **"command not found"** — use an absolute path to the exe or script.
-- **Tools missing after config** — MCP config changes require a host restart.
-- **Wrong board** — check `BOARDAGENT_DB`; each instance has its own file.
-- **Windows + stdio hosts** — the exe is the reliable choice; the Python
-  module variant (`python -m boardagent.mcp_server`) also works when Python
-  is installed.
+- **"command not found"** — use the full, absolute path to the exe or
+  script, not just the name.
+- **Tools do not appear after editing config** — quit and restart your
+  AI tool completely. Most tools only read the config file at startup.
+- **Wrong board / tasks missing** — check the `BOARDAGENT_DB`
+  environment variable. Each board is a separate file; if the path is
+  different, you are looking at a different board.
+- **Windows-specific** — the `.exe` is the most reliable option. If you
+  have Python installed, `python -m boardagent.mcp_server` also works.
