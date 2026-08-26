@@ -308,6 +308,12 @@ def _run_forever(host: str, port: int) -> None:
         except KeyboardInterrupt:
             return
         except Exception as exc:
+            # If another instance owns the port while we were restarting
+            # (watchdog + manual start race), bow out instead of
+            # crash-looping forever.
+            if _port_in_use(host, port):
+                print("another instance owns the port; exiting", flush=True)
+                return
             print(f"server crashed ({exc}); restarting in 2s", flush=True)
             time.sleep(2)
 
