@@ -1013,7 +1013,21 @@ class BoardAgentApp(App):
             asyncio.create_task(self.refresh_settings_tab())
 
 
-class CreateTaskScreen(Screen):
+class ArrowNavScreen(Screen):
+    """Modal screens navigate fields with arrows, not just Tab.
+
+    Up/Down move focus between fields; Tab still works as a fallback.
+    When a Select overlay is open, the overlay handles up/down itself
+    (option navigation) before these bindings are reached.
+    """
+
+    BINDINGS = [
+        ("up", "app.focus_previous", "Previous"),
+        ("down", "app.focus_next", "Next"),
+    ]
+
+
+class CreateTaskScreen(ArrowNavScreen):
     """Modal screen to add a task quickly."""
 
     CSS = """
@@ -1061,7 +1075,7 @@ class CreateTaskScreen(Screen):
             self.app.notify(f"Create failed: {exc}", severity="error")
 
 
-class EditTaskScreen(Screen):
+class EditTaskScreen(ArrowNavScreen):
     """Modal screen to edit a task's human fields."""
 
     CSS = """
