@@ -313,42 +313,28 @@ class SettingsSelect(Select, inherit_bindings=False):
 
 
 class KeysTable(DataTable):
-    """API-keys table: mouse picks the selection, arrows just navigate.
+    """API-keys table: keyboard-first selection; hover only previews.
 
-    Selection model (matches how the user actually uses it):
-    - HOVERING a row selects it: the cursor follows the mouse, so the
-      strong highlighted row IS the selected key. (Click selects too.)
-    - Pressing UP from the table goes straight to the Delete button above
-      WITHOUT dragging the cursor through the rows — the selection stays
-      pinned on the key the user picked. Delete Selected then reads the
-      cursor = the hovered key.
-    - Arrow DOWN moves the cursor within the table (keyboard browse); at
-      the bottom edge it exits to the keybinds below.
+    The SELECTION is the cursor row — moved by ARROWS (native list
+    behavior) or a CLICK. Hover is a paint-only preview and never moves
+    the cursor, so a fully mouse-free workflow is deterministic: arrow
+    down to the key you want, delete from the button above.
 
-    Cursor-placement fight: when focus ENTERS this table via an arrow key,
-    Textual re-dispatches that same key to the newly-focused table (its
-    action_cursor_up/down runs a second time). A one-shot pending_entry
-    flag swallows the re-delivered key and pins the cursor to the entry
-    edge (bottom for up-entry), so it can't land on a "second-lowest" row.
+    Up/Down move the cursor natively within the table; at the edges the
+    cursor exits focus instead of clamping (top edge -> Delete Selected
+    button, bottom edge -> the keybinds below), so arrows keep flowing.
+
+    Cursor-placement fight: when focus ENTERS this table via an arrow
+    key, Textual re-dispatches that same key to the newly-focused table
+    (its action_cursor_up/down runs one more time). A one-shot
+    pending_entry flag swallows the re-delivered key and pins the cursor
+    to the entry edge (bottom for up-entry, top for down-entry), so it
+    can't land on a "second-lowest" row.
     """
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.pending_entry: tuple[str, float] | None = None
-
-    def _on_mouse_move(self, event) -> None:
-        super()._on_mouse_move(event)
-        try:
-            meta = getattr(event.style, "meta", None) or {}
-            row = meta.get("row")
-            if (
-                row is not None
-                and 0 <= row < self.row_count
-                and self.cursor_row != row
-            ):
-                self.move_cursor(row=row, column=0)
-        except Exception:
-            pass
 
     def action_cursor_up(self) -> None:
         if self.pending_entry:
@@ -358,11 +344,10 @@ class KeysTable(DataTable):
                 if self.row_count:
                     self.move_cursor(row=self.row_count - 1, column=0)
                 return
-        # Up from the keys table always leaves for the Delete Selected
-        # button above — the cursor (the picked row) stays put. Dragging
-        # the cursor through the rows on the way out is what made Delete
-        # hit the top row instead of the hovered one.
-        self.screen.focus_previous()
+        if self.cursor_row is None or self.cursor_row > 0 or not self.row_count:
+            super().action_cursor_up()
+        else:
+            self.screen.focus_previous()
 
     def action_cursor_down(self) -> None:
         if self.pending_entry:
