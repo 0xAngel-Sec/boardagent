@@ -478,14 +478,6 @@ class BoardAgentApp(App):
             self.query_one(TaskTable).focus()
         except Exception:
             pass
-        # Key action buttons are mouse affordances; arrows skip them so
-        # navigation from the API keys section to keybinds is one press per
-        # field, not two per button.
-        for bid in ("create-key", "delete-key"):
-            try:
-                self.query_one(f"#{bid}", Button).can_focus = False
-            except Exception:
-                pass
 
     def _register_themes(self) -> None:
         """Register every BoardAgent theme as a Textual Theme."""
@@ -595,18 +587,12 @@ class BoardAgentApp(App):
                         id="mcp-enabled",
                     ),
                     Label("API Keys", classes="settings-section"),
-                    DataTable(id="keys-table", cursor_type="row"),
                     Horizontal(
-                        Input(placeholder="Key name", id="key-name"),
-                        SettingsSelect(
-                            ((r, r) for r in (ROLE_READ, ROLE_WRITE, ROLE_ADMIN)),
-                            value=ROLE_READ,
-                            id="key-role",
-                            allow_blank=False,
-                        ),
                         Button("Create Key", id="create-key"),
                         Button("Delete Selected", id="delete-key"),
+                        classes="keys-actions",
                     ),
+                    DataTable(id="keys-table", cursor_type="row"),
                     Label("Keybinds", classes="settings-section"),
                     *self._keybind_rows(),
                     Button("Save Settings", id="save-settings"),
@@ -998,28 +984,6 @@ class BoardAgentApp(App):
         save_server_settings(self.server_settings)
         self.notify("Backend settings saved. Restart server to apply.")
 
-    async def _create_key(self) -> None:
-        name = self.query_one("#key-name", Input).value.strip()
-        role = str(self.query_one("#key-role", Select).value or ROLE_READ)
-        if not name:
-            self.notify("Key name required.", severity="error")
-            return
-        try:
-            r = await asyncio.to_thread(
-                httpx.post,
-                f"{_api_base()}/keys",
-                json={"name": name, "role": role},
-                headers=_api_headers(),
-                timeout=5.0,
-            )
-            r.raise_for_status()
-            key = r.json()
-            self.notify(f"Key created: {key['key']}")
-            self.query_one("#key-name", Input).value = ""
-            await self.refresh_settings_tab()
-        except Exception as exc:
-            self.notify(f"Create key failed: {exc}", severity="error")
-
     async def _delete_selected_key(self) -> None:
         table = self.query_one("#keys-table", DataTable)
         if table.cursor_row is None:
@@ -1078,7 +1042,7 @@ class BoardAgentApp(App):
         elif bid == "btn-delete":
             await self.action_delete()
         elif bid == "create-key":
-            await self._create_key()
+            self.push_screen(CreateKeyScreen())
         elif bid == "delete-key":
             await self._delete_selected_key()
         elif bid and bid.startswith("kb-") and not bid.startswith("kb-val-"):
@@ -1178,6 +1142,66 @@ class ArrowNavScreen(Screen):
         ("up", "app.focus_previous", "Previous"),
         ("down", "app.focus_next", "Next"),
     ]
+
+
+class CreateKeyScreen(ArrowNavScreen):
+    """Modal screen to create an API key with a role."""
+
+    CSS = """
+    CreateKeyScreen { align: center middle; }
+    #dialog { width: 62; height: auto; border: solid $primary; padding: 1 2; }
+    #role-hint { color: $text-muted; height: auto; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label("[b]Create API Key[/b]")
+            yield Label("Name", classes="settings-label")
+            yield Input(placeholder="e.g. agent-1", id="key-name")
+            yield Label("Role", classes="settings-label")
+            yield SettingsSelect(
+                (
+                    (ROLE_READ, ROLE_READ),
+                    (ROLE_WRITE, ROLE_WRITE),
+                    (ROLE_ADMIN, ROLE_ADMIN),
+                ),
+                value=ROLE_READ,
+                id="key-role",
+                allow_blank=False,
+            )
+            yield Label(
+                "[dim]read — list & view tasks only\n"
+                "write — create, edit, complete, claim\n"
+                "admin — everything, including deleting tasks & keys[/dim]",
+                id="role-hint",
+            )
+            yield Button("Create", id="create")
+            yield Button("Cancel", id="cancel")
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.app.pop_screen()
+            return
+        name = self.query_one("#key-name", Input).value.strip()
+        role = str(self.query_one("#key-role", Select).value or ROLE_READ)
+        if not name:
+            self.app.notify("Key name required.", severity="error")
+            return
+        try:
+            r = await asyncio.to_thread(
+                httpx.post,
+                f"{_api_base()}/keys",
+                json={"name": name, "role": role},
+                headers=_api_headers(),
+                timeout=5.0,
+            )
+            r.raise_for_status()
+            key = r.json()
+            self.app.notify(f"Key created: {key['key']}")
+            await self.app.refresh_settings_tab()
+            self.app.pop_screen()
+        except Exception as exc:
+            self.app.notify(f"Create key failed: {exc}", severity="error")
 
 
 class CreateTaskScreen(ArrowNavScreen):
