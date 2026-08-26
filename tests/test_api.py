@@ -306,6 +306,11 @@ class TestTaskFields:
                 "description": "do the thing",
                 "tags": ["urgent", "backend"],
                 "estimate": "2h",
+                "category": "feature",
+                "links": ["https://example.com", "C:/repo/file.py"],
+                "acceptance_criteria": "works on prod",
+                "dependencies": ["#12", "#34"],
+                "notes": ["started", "blocked on review"],
                 "custom_fields": {"reviewer": "kimi", "ticket": "BA-42"},
             },
             headers=_auth(keys_file),
@@ -315,6 +320,11 @@ class TestTaskFields:
         assert task["description"] == "do the thing"
         assert task["tags"] == ["urgent", "backend"]
         assert task["estimate"] == "2h"
+        assert task["category"] == "feature"
+        assert task["links"] == ["https://example.com", "C:/repo/file.py"]
+        assert task["acceptance_criteria"] == "works on prod"
+        assert task["dependencies"] == ["#12", "#34"]
+        assert task["notes"] == ["started", "blocked on review"]
         assert task["custom_fields"] == {"reviewer": "kimi", "ticket": "BA-42"}
 
     def test_task_fields_default_empty(self, client, keys_file):
@@ -323,6 +333,11 @@ class TestTaskFields:
         task = r.json()
         assert task["tags"] == []
         assert task["estimate"] is None
+        assert task["category"] is None
+        assert task["links"] == []
+        assert task["acceptance_criteria"] is None
+        assert task["dependencies"] == []
+        assert task["notes"] == []
         assert task["custom_fields"] == {}
 
     def test_update_task_fields(self, client, keys_file):
@@ -334,6 +349,11 @@ class TestTaskFields:
                 "description": "updated",
                 "tags": ["a", "b"],
                 "estimate": "1d",
+                "category": "bug",
+                "links": ["https://x.dev"],
+                "acceptance_criteria": "no regressions",
+                "dependencies": ["#1"],
+                "notes": ["reproduced"],
                 "custom_fields": {"x": "1"},
             },
             headers=_auth(keys_file),
@@ -343,12 +363,17 @@ class TestTaskFields:
         assert task["description"] == "updated"
         assert task["tags"] == ["a", "b"]
         assert task["estimate"] == "1d"
+        assert task["category"] == "bug"
+        assert task["links"] == ["https://x.dev"]
+        assert task["acceptance_criteria"] == "no regressions"
+        assert task["dependencies"] == ["#1"]
+        assert task["notes"] == ["reproduced"]
         assert task["custom_fields"] == {"x": "1"}
 
     def test_update_task_fields_partial(self, client, keys_file):
         r = client.post(
             "/tasks",
-            json={"title": "t", "tags": ["keep"], "estimate": "30m"},
+            json={"title": "t", "tags": ["keep"], "estimate": "30m", "category": "chore"},
             headers=_auth(keys_file),
         )
         tid = r.json()["id"]
@@ -360,29 +385,64 @@ class TestTaskFields:
         # untouched fields survive a partial update
         assert task["tags"] == ["keep"]
         assert task["estimate"] == "1h"
+        assert task["category"] == "chore"
 
     def test_clear_task_fields(self, client, keys_file):
         r = client.post(
             "/tasks",
-            json={"title": "t", "tags": ["x"], "estimate": "2h", "custom_fields": {"k": "v"}},
+            json={
+                "title": "t",
+                "tags": ["x"],
+                "estimate": "2h",
+                "category": "bug",
+                "links": ["https://x.dev"],
+                "acceptance_criteria": "ac",
+                "dependencies": ["#1"],
+                "notes": ["n1"],
+                "custom_fields": {"k": "v"},
+            },
             headers=_auth(keys_file),
         )
         tid = r.json()["id"]
         r = client.patch(
             f"/tasks/{tid}",
-            json={"tags": [], "estimate": "", "custom_fields": {}},
+            json={
+                "tags": [],
+                "estimate": "",
+                "category": "",
+                "links": [],
+                "acceptance_criteria": "",
+                "dependencies": [],
+                "notes": [],
+                "custom_fields": {},
+            },
             headers=_auth(keys_file),
         )
         assert r.status_code == 200
         task = r.json()
         assert task["tags"] == []
         assert task["estimate"] == ""
+        assert task["category"] == ""
+        assert task["links"] == []
+        assert task["acceptance_criteria"] == ""
+        assert task["dependencies"] == []
+        assert task["notes"] == []
         assert task["custom_fields"] == {}
 
     def test_task_fields_survive_claim_complete(self, client, keys_file):
         r = client.post(
             "/tasks",
-            json={"title": "t", "tags": ["keep"], "estimate": "1h", "custom_fields": {"k": "v"}},
+            json={
+                "title": "t",
+                "tags": ["keep"],
+                "estimate": "1h",
+                "category": "feature",
+                "links": ["https://x.dev"],
+                "acceptance_criteria": "ac",
+                "dependencies": ["#2"],
+                "notes": ["n"],
+                "custom_fields": {"k": "v"},
+            },
             headers=_auth(keys_file),
         )
         tid = r.json()["id"]
@@ -393,4 +453,9 @@ class TestTaskFields:
         task = r.json()
         assert task["tags"] == ["keep"]
         assert task["estimate"] == "1h"
+        assert task["category"] == "feature"
+        assert task["links"] == ["https://x.dev"]
+        assert task["acceptance_criteria"] == "ac"
+        assert task["dependencies"] == ["#2"]
+        assert task["notes"] == ["n"]
         assert task["custom_fields"] == {"k": "v"}

@@ -85,6 +85,11 @@ TOOLS = [
                 "metadata": {"type": "object", "description": "Freeform JSON metadata"},
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "Labels for the task"},
                 "estimate": {"type": "string", "description": "Time estimate, e.g. '2h'"},
+                "category": {"type": "string", "description": "bug/feature/chore/research/refactor"},
+                "links": {"type": "array", "items": {"type": "string"}, "description": "Reference URLs or file paths"},
+                "acceptance_criteria": {"type": "string", "description": "Definition of done"},
+                "dependencies": {"type": "array", "items": {"type": "string"}, "description": "Blocking task ids/names"},
+                "notes": {"type": "array", "items": {"type": "string"}, "description": "Running log of updates"},
                 "custom_fields": {"type": "object", "description": "Custom field name -> value"},
             },
             "required": ["title"],
@@ -128,6 +133,11 @@ TOOLS = [
                 "metadata": {"type": "object"},
                 "tags": {"type": "array", "items": {"type": "string"}},
                 "estimate": {"type": "string"},
+                "category": {"type": "string"},
+                "links": {"type": "array", "items": {"type": "string"}},
+                "acceptance_criteria": {"type": "string"},
+                "dependencies": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "array", "items": {"type": "string"}},
                 "custom_fields": {"type": "object"},
             },
             "required": ["id"],
@@ -233,6 +243,11 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     tags=args.get("tags") or [],
                     estimate=args.get("estimate"),
                     custom_fields=args.get("custom_fields") or {},
+                    category=args.get("category"),
+                    links=args.get("links") or [],
+                    acceptance_criteria=args.get("acceptance_criteria"),
+                    dependencies=args.get("dependencies") or [],
+                    notes=args.get("notes") or [],
                 )
                 text = _to_json(svc.create_task(create))
 
@@ -262,6 +277,11 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     tags=args.get("tags"),
                     estimate=args.get("estimate"),
                     custom_fields=args.get("custom_fields"),
+                    category=args.get("category"),
+                    links=args.get("links"),
+                    acceptance_criteria=args.get("acceptance_criteria"),
+                    dependencies=args.get("dependencies"),
+                    notes=args.get("notes"),
                 )
                 result = svc.update_task(args["id"], update)
                 text = _to_json(result if result else {"error": "task not found"})

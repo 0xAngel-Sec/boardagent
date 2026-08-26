@@ -831,7 +831,7 @@ class BoardAgentApp(App):
                 table.remove_row(key)
 
         # (re)create columns only when the mode's column set changed
-        expected = 10 if self.ai_mode else 8
+        expected = 11 if self.ai_mode else 9
         if len(table.columns) != expected:
             # Removing columns drops the cell data of every existing row
             # (Textual keys cells by column), so rows must be rebuilt too —
@@ -841,9 +841,9 @@ class BoardAgentApp(App):
             for col in list(table.columns):
                 table.remove_column(getattr(col, "key", col))
             if self.ai_mode:
-                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Status", "Priority", "Project", "Agent", "Metadata")
+                table.add_columns("ID", "Title", "Description", "Tags", "Estimate", "Category", "Status", "Priority", "Project", "Agent", "Metadata")
             else:
-                table.add_columns("Title", "Description", "Tags", "Estimate", "Status", "Priority", "Project", "Due")
+                table.add_columns("Title", "Description", "Tags", "Estimate", "Category", "Status", "Priority", "Project", "Due")
 
         for t in self.tasks:
             key = str(t["id"])
@@ -854,6 +854,7 @@ class BoardAgentApp(App):
             desc = (t.get("description") or "").replace("\n", " ")[:40]
             tags = ", ".join(t.get("tags") or [])[:30]
             estimate = t.get("estimate") or ""
+            category = t.get("category") or ""
             if self.ai_mode:
                 metadata = json.dumps(t.get("metadata", {}))
                 table.add_row(
@@ -862,6 +863,7 @@ class BoardAgentApp(App):
                     desc,
                     tags,
                     estimate,
+                    category,
                     self._colored(status, f"status-{status}"),
                     self._colored(priority, f"priority-{priority}"),
                     t.get("project") or "",
@@ -881,6 +883,7 @@ class BoardAgentApp(App):
                     desc,
                     tags,
                     estimate,
+                    category,
                     self._colored(status, f"status-{status}"),
                     self._colored(priority, f"priority-{priority}"),
                     t.get("project") or "",
@@ -1086,11 +1089,26 @@ class BoardAgentApp(App):
             lines.append(f"Due: {task['due']}")
         if task.get("estimate"):
             lines.append(f"Estimate: {task['estimate']}")
+        if task.get("category"):
+            lines.append(f"Category: {task['category']}")
         tags = task.get("tags") or []
         if tags:
             lines.append(f"Tags: {', '.join(tags)}")
+        links = task.get("links") or []
+        if links:
+            lines.append(f"Links: {', '.join(links)}")
+        deps = task.get("dependencies") or []
+        if deps:
+            lines.append(f"Dependencies: {', '.join(deps)}")
         if task.get("description"):
             lines.append(f"\n{task['description']}")
+        if task.get("acceptance_criteria"):
+            lines.append(f"\n[b]Acceptance criteria[/b]\n{task['acceptance_criteria']}")
+        notes = task.get("notes") or []
+        if notes:
+            lines.append("\n[b]Notes[/b]")
+            for n in notes:
+                lines.append(f"- {n}")
         custom = task.get("custom_fields") or {}
         if custom:
             lines.append("\n[b]Custom fields[/b]")
@@ -1496,7 +1514,7 @@ class CreateTaskScreen(ArrowNavScreen):
 
     CSS = """
     CreateTaskScreen { align: center middle; }
-    #dialog { width: 68; height: auto; border: solid $primary; padding: 1 2; }
+    #dialog { width: 68; height: auto; max-height: 100%; overflow-y: auto; border: solid $primary; padding: 1 2; }
     .field-row { height: 3; }
     .field-row > * { margin: 0 1; }
     .field-row Input { width: 1fr; }
@@ -1516,6 +1534,16 @@ class CreateTaskScreen(ArrowNavScreen):
             yield Input(placeholder="e.g. urgent, backend", id="tags")
             yield Label("Estimate", classes="settings-label")
             yield Input(placeholder="e.g. 2h, 1d", id="estimate")
+            yield Label("Category", classes="settings-label")
+            yield Input(placeholder="bug / feature / chore / research / refactor", id="category")
+            yield Label("Links (comma separated)", classes="settings-label")
+            yield Input(placeholder="https://... or C:\\path\\to\\file", id="links")
+            yield Label("Acceptance criteria", classes="settings-label")
+            yield TextArea("", id="acceptance")
+            yield Label("Dependencies (comma separated)", classes="settings-label")
+            yield Input(placeholder="e.g. #12, #34 or task names", id="dependencies")
+            yield Label("Notes (one per line)", classes="settings-label")
+            yield TextArea("", id="notes")
             yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
                 value="white",
@@ -1568,6 +1596,11 @@ class CreateTaskScreen(ArrowNavScreen):
         priority = self.query_one("#priority", Select).value or "white"
         tags = [t.strip() for t in self.query_one("#tags", Input).value.split(",") if t.strip()]
         estimate = self.query_one("#estimate", Input).value.strip()
+        category = self.query_one("#category", Input).value.strip()
+        links = [l.strip() for l in self.query_one("#links", Input).value.split(",") if l.strip()]
+        acceptance = self.query_one("#acceptance", TextArea).text
+        deps = [d.strip() for d in self.query_one("#dependencies", Input).value.split(",") if d.strip()]
+        notes = [n.strip() for n in self.query_one("#notes", TextArea).text.splitlines() if n.strip()]
         custom_fields = self._collect_custom_fields()
         if not title:
             self.app.notify("Title required", severity="error")
@@ -1583,6 +1616,11 @@ class CreateTaskScreen(ArrowNavScreen):
                     "description": description,
                     "tags": tags,
                     "estimate": estimate,
+                    "category": category,
+                    "links": links,
+                    "acceptance_criteria": acceptance,
+                    "dependencies": deps,
+                    "notes": notes,
                     "custom_fields": custom_fields,
                 },
                 headers=_api_headers(),
@@ -1601,7 +1639,7 @@ class EditTaskScreen(ArrowNavScreen):
 
     CSS = """
     EditTaskScreen { align: center middle; }
-    #dialog { width: 68; height: auto; border: solid $primary; padding: 1 2; }
+    #dialog { width: 68; height: auto; max-height: 100%; overflow-y: auto; border: solid $primary; padding: 1 2; }
     .field-row { height: 3; }
     .field-row > * { margin: 0 1; }
     .field-row Input { width: 1fr; }
@@ -1630,6 +1668,22 @@ class EditTaskScreen(ArrowNavScreen):
             )
             yield Label("Estimate", classes="settings-label")
             yield Input(value=self.task_data.get("estimate") or "", id="estimate")
+            yield Label("Category", classes="settings-label")
+            yield Input(value=self.task_data.get("category") or "", id="category")
+            yield Label("Links (comma separated)", classes="settings-label")
+            yield Input(
+                value=", ".join(self.task_data.get("links") or []),
+                id="links",
+            )
+            yield Label("Acceptance criteria", classes="settings-label")
+            yield TextArea(self.task_data.get("acceptance_criteria") or "", id="acceptance")
+            yield Label("Dependencies (comma separated)", classes="settings-label")
+            yield Input(
+                value=", ".join(self.task_data.get("dependencies") or []),
+                id="dependencies",
+            )
+            yield Label("Notes (one per line)", classes="settings-label")
+            yield TextArea("\n".join(self.task_data.get("notes") or []), id="notes")
             yield SettingsSelect(
                 ((p, p) for p in ("white", "blue", "green", "yellow", "orange", "red")),
                 value=self.task_data.get("priority", "white"),
@@ -1683,6 +1737,11 @@ class EditTaskScreen(ArrowNavScreen):
         priority = self.query_one("#priority", Select).value or "white"
         tags = [t.strip() for t in self.query_one("#tags", Input).value.split(",") if t.strip()]
         estimate = self.query_one("#estimate", Input).value.strip()
+        category = self.query_one("#category", Input).value.strip()
+        links = [l.strip() for l in self.query_one("#links", Input).value.split(",") if l.strip()]
+        acceptance = self.query_one("#acceptance", TextArea).text
+        deps = [d.strip() for d in self.query_one("#dependencies", Input).value.split(",") if d.strip()]
+        notes = [n.strip() for n in self.query_one("#notes", TextArea).text.splitlines() if n.strip()]
         custom_fields = self._collect_custom_fields()
         if not title:
             self.app.notify("Title required", severity="error")
@@ -1698,6 +1757,11 @@ class EditTaskScreen(ArrowNavScreen):
                     "description": description,
                     "tags": tags,
                     "estimate": estimate,
+                    "category": category,
+                    "links": links,
+                    "acceptance_criteria": acceptance,
+                    "dependencies": deps,
+                    "notes": notes,
                     "custom_fields": custom_fields,
                 },
                 headers=_api_headers(),

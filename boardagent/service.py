@@ -60,6 +60,11 @@ class TaskService:
             tags=create.tags,
             estimate=create.estimate,
             custom_fields=create.custom_fields,
+            category=create.category,
+            links=create.links,
+            acceptance_criteria=create.acceptance_criteria,
+            dependencies=create.dependencies,
+            notes=create.notes,
         )
         return self.store.get_task(task_id)  # type: ignore[return-value]
 
@@ -114,6 +119,11 @@ class TaskService:
             tags=update.tags,
             estimate=update.estimate,
             custom_fields=update.custom_fields,
+            category=update.category,
+            links=update.links,
+            acceptance_criteria=update.acceptance_criteria,
+            dependencies=update.dependencies,
+            notes=update.notes,
         )
 
     def delete_task(self, task_id: int) -> bool:
