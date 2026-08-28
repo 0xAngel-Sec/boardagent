@@ -195,3 +195,153 @@ async def test_mcp_invalid_key_rejected(tmp_path, monkeypatch):
             )
             assert result.is_error is True
             assert "invalid API key" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_mcp_console_script_serves(tmp_path):
+    """The installed `boardagent-mcp` console script actually serves.
+
+    Regression: pyproject.toml wired the script to the async main(), so
+    `pip install -e .` produced a script that printed an unawaited
+    coroutine and exited 0 — a silently dead MCP server. The script must
+    now route through the sync cli() wrapper.
+    """
+    import shutil
+
+    exe = shutil.which("boardagent-mcp")
+    if exe is None:
+        pytest.skip("boardagent-mcp console script not on PATH")
+
+    env = {
+        "PYTHONUNBUFFERED": "1",
+        "BOARDAGENT_DB": str(tmp_path / "console_test.db"),
+        "BOARDAGENT_KEYS": str(tmp_path / "keys.json"),
+    }
+    server_params = StdioServerParameters(
+        command=exe,
+        args=[],
+        cwd=str(ROOT),
+        env=env,
+    )
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            names = {t.name for t in tools.tools}
+            assert "boardagent_create_task" in names
+            result = await session.call_tool(
+                "boardagent_create_task", arguments={"title": "via console script"}
+            )
+            task = json.loads(result.content[0].text)
+            assert task["title"] == "via console script"
+
+
+@pytest.mark.anyio
+async def test_mcp_invalid_input_code(tmp_path):
+    """Malformed calls return invalid_input, not internal.
+
+    Regression: a missing required field (or bad enum) raised KeyError /
+    ValueError inside the handler and was reported as `internal` — a
+    server bug. Agents following the documented protocol would retry a
+    malformed call forever instead of fixing their own arguments.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+
+            result = await session.call_tool("boardagent_create_task", arguments={})
+            assert result.is_error is True
+            body = json.loads(result.content[0].text)
+            assert body["code"] == "invalid_input"
+            assert "title" in body["error"]
+
+            result = await session.call_tool(
+                "boardagent_create_task",
+                arguments={"title": "x", "priority": "chartreuse"},
+            )
+            assert result.is_error is True
+            body = json.loads(result.content[0].text)
+            assert body["code"] == "invalid_input"
+
+            result = await session.call_tool("boardagent_get_task", arguments={})
+            assert result.is_error is True
+            body = json.loads(result.content[0].text)
+            assert body["code"] == "invalid_input"
+
+            result = await session.call_tool(
+                "boardagent_claim_task", arguments={"id": 1}
+            )
+            assert result.is_error is True
+            body = json.loads(result.content[0].text)
+            assert body["code"] == "invalid_input"
+
+
+@pytest.mark.anyio
+async def test_mcp_ownership_enforced_unauthenticated(tmp_path):
+    """PATCH status cannot bypass ownership in unauthenticated local mode.
+
+    Regression: with no BOARDAGENT_API_KEY, caller_role was None and the
+    status-transition check returned early — so a non-owner could PATCH a
+    claimed task to done while the complete endpoint correctly blocked
+    them. Same intent, two doors, one locked.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+
+            result = await session.call_tool(
+                "boardagent_create_task",
+                arguments={"title": "alpha task", "agent_id": "alpha"},
+            )
+            task = json.loads(result.content[0].text)
+            tid = task["id"]
+
+            result = await session.call_tool(
+                "boardagent_claim_task", arguments={"id": tid, "agent_id": "alpha"}
+            )
+            assert json.loads(result.content[0].text)["status"] == "in_progress"
+
+            # complete as beta: blocked
+            result = await session.call_tool(
+                "boardagent_complete_task", arguments={"id": tid, "agent_id": "beta"}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "not_owner"
+
+            # PATCH status=done as beta: must also be blocked now
+            result = await session.call_tool(
+                "boardagent_update_task",
+                arguments={"id": tid, "status": "done", "agent_id": "beta"},
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "not_owner"
+
+            # owner can still complete
+            result = await session.call_tool(
+                "boardagent_complete_task", arguments={"id": tid, "agent_id": "alpha"}
+            )
+            assert result.is_error is not True
+            assert json.loads(result.content[0].text)["status"] == "done"
+
+
+@pytest.mark.anyio
+async def test_mcp_timestamps_match_rest_format(tmp_path):
+    """MCP timestamps use the same Z-suffix format as the REST surface.
+
+    Regression: MCP returned the raw stored isoformat (+00:00) while REST
+    re-serialized through pydantic to Z. Both valid ISO 8601, but a
+    string comparison across surfaces reported a false "changed" signal.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "boardagent_create_task", arguments={"title": "ts check"}
+            )
+            task = json.loads(result.content[0].text)
+            for key in ("created_at", "updated_at"):
+                assert task[key].endswith("Z"), (key, task[key])
+                assert "+00:00" not in task[key]

@@ -72,12 +72,12 @@ Requires `owner_agent_id == agent_id`. Errors: `not_owner`, `invalid_transition`
 Failures return `isError: true` with JSON text:
 
 ```json
-{"error": "message", "code": "already_claimed|not_owner|invalid_transition|not_found|boardagent_error|internal|unknown_tool"}
+{"error": "message", "code": "already_claimed|not_owner|invalid_transition|not_found|invalid_input|boardagent_error|internal|unknown_tool"}
 ```
 
 `not_found` is emitted by get/update/delete/claim/complete for a missing task.
 
-Check `isError` — never string-parse success. `internal` = server bug, retry later. `boardagent_error` is a catch-all that also covers auth/role failures (invalid API key, insufficient permissions). If MCP is disabled in settings, the server refuses to start entirely — no tool call will ever succeed.
+Check `isError` — never string-parse success. `invalid_input` = the caller sent a malformed request (missing required argument, bad enum value); fix the arguments and retry. `internal` = server bug, retry later. `boardagent_error` is a catch-all that also covers auth/role failures (invalid API key, insufficient permissions). If MCP is disabled in settings, the server refuses to start entirely — no tool call will ever succeed.
 
 ## Agent conventions
 

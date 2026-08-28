@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "boardagent"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local-first, agent-first task manager"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,7 +16,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "textual>=8.2.8",
     "httpx>=0.27.0",
-    "mcp",
+    "mcp>=1.0.0",
     "pyyaml>=6.0",
 ]
 
@@ -29,7 +29,7 @@ dev = [
 [project.scripts]
 boardagent-server = "boardagent.api:main"
 boardagent = "boardagent.tui:main"
-boardagent-mcp = "boardagent.mcp_server:main"
+boardagent-mcp = "boardagent.mcp_server:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]

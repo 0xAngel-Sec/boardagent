@@ -126,7 +126,12 @@ tidy:
   own name, so agents never overwrite each other's data.
 
 You do not need to do anything for these rules to apply — they are built
-in.
+in. Ownership is enforced in every mode, including unauthenticated local
+mode: an agent that did not claim a task cannot mark it done, block it,
+or release it, whether it uses the complete endpoint or PATCHes the
+status directly. (Ownership is cooperative, not a security boundary —
+`agent_id` is self-declared, so a malicious caller could impersonate
+another agent. It prevents accidents, not attacks.)
 
 ## Running more than one board
 

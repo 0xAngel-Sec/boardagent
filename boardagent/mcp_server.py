@@ -37,6 +37,7 @@ from .models import (
 )
 from .service import (
     AlreadyClaimedError,
+    InvalidInputError,
     InvalidTransitionError,
     NotOwnerError,
     BoardAgentError,
@@ -48,13 +49,57 @@ ROLE_RANK = {ROLE_READ: 1, ROLE_WRITE: 2, ROLE_ADMIN: 3}
 
 
 def _to_json(obj: Any) -> str:
-    return json.dumps(obj, indent=2, default=str)
+    # Normalize timestamps to the REST surface's format (Z suffix) so a
+    # string comparison across surfaces never reports a false "changed"
+    # signal. Recurses into lists and nested dicts (e.g. the task dicts
+    # inside a list_tasks response).
+    def _walk(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: _normalize_ts(v) if k in ("due", "created_at", "updated_at") else _walk(v)
+                for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [_walk(v) for v in value]
+        return value
+
+    return json.dumps(_walk(obj), indent=2, default=str)
 
 
 def _iso_to_dt(value: str | None) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(value)
+
+
+def _require_args(args: dict[str, Any], *names: str) -> None:
+    """Validate required tool arguments before dispatch.
+
+    The MCP SDK does not enforce the `required` list in the tool schema
+    before calling the handler, so a missing field would otherwise surface
+    as a KeyError and be reported as a server bug (`internal`). Raise
+    InvalidInputError so the caller gets a 400-class `invalid_input` code
+    and can fix its own arguments.
+    """
+    missing = [n for n in names if n not in args]
+    if missing:
+        raise InvalidInputError(f"missing required argument(s): {', '.join(missing)}")
+
+
+def _normalize_ts(value: str | None) -> str | None:
+    """Normalize a stored timestamp to the REST surface's format.
+
+    The service stores `datetime.isoformat()` (+00:00 offset); the REST
+    layer re-serializes through pydantic, which emits `Z`. MCP returns the
+    raw stored string. Both are valid ISO 8601, but a naive string
+    comparison across surfaces would report a false "changed" signal.
+    """
+    if not value:
+        return value
+    try:
+        return datetime.fromisoformat(value).isoformat().replace("+00:00", "Z")
+    except ValueError:
+        return value
 
 
 def _tool(name: str, description: str, schema: dict[str, Any]) -> types.Tool:
@@ -235,6 +280,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
             auth_role = _require(TOOL_ROLES.get(name, ROLE_READ))
 
             if name == "boardagent_create_task":
+                _require_args(args, "title")
                 create = TaskCreate(
                     title=args["title"],
                     description=args.get("description"),
@@ -276,6 +322,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 text = _to_json({"tasks": tasks, "count": len(tasks)})
 
             elif name == "boardagent_get_task":
+                _require_args(args, "id")
                 task = svc.get_task(args["id"])
                 if task is None:
                     text = json.dumps({"error": "task not found", "code": "not_found"})
@@ -284,6 +331,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     text = _to_json(task)
 
             elif name == "boardagent_update_task":
+                _require_args(args, "id")
                 update = TaskUpdate(
                     title=args.get("title"),
                     description=args.get("description"),
@@ -313,6 +361,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     text = _to_json(result)
 
             elif name == "boardagent_delete_task":
+                _require_args(args, "id")
                 deleted = svc.delete_task(args["id"])
                 if not deleted:
                     text = json.dumps({"error": "task not found", "code": "not_found"})
@@ -321,10 +370,12 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     text = json.dumps({"deleted": True})
 
             elif name == "boardagent_claim_task":
+                _require_args(args, "id", "agent_id")
                 result = svc.claim_task(args["id"], TaskClaim(agent_id=args["agent_id"]))
                 text = _to_json(result)
 
             elif name == "boardagent_complete_task":
+                _require_args(args, "id", "agent_id")
                 result = svc.complete_task(
                     args["id"], TaskComplete(agent_id=args["agent_id"])
                 )
@@ -345,6 +396,14 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
             is_error = True
         except TaskNotFoundError as exc:
             text = json.dumps({"error": str(exc), "code": "not_found"})
+            is_error = True
+        except InvalidInputError as exc:
+            text = json.dumps({"error": str(exc), "code": "invalid_input"})
+            is_error = True
+        except ValueError as exc:
+            # Enum/datetime parsing of caller-supplied arguments (bad
+            # priority, malformed due) — a caller error, not a server bug.
+            text = json.dumps({"error": str(exc), "code": "invalid_input"})
             is_error = True
         except BoardAgentError as exc:
             text = json.dumps({"error": str(exc), "code": "boardagent_error"})
@@ -377,6 +436,17 @@ async def main() -> None:
             write_stream,
             server.create_initialization_options(),
         )
+
+
+def cli() -> None:
+    """Console-script entry point.
+
+    pyproject.toml wires `boardagent-mcp` to this sync function. An async
+    main() wired directly to a console script would print an unawaited
+    coroutine and exit 0 — a silent, dead MCP server. This wrapper is what
+    makes `pip install -e .` actually serve.
+    """
+    asyncio.run(main())
 
 
 if __name__ == "__main__":

@@ -32,6 +32,16 @@ class InvalidTransitionError(BoardAgentError):
     pass
 
 
+class InvalidInputError(BoardAgentError):
+    """Caller sent a malformed request (missing field, bad enum value).
+
+    Distinct from BoardAgentError so the MCP surface can return a
+    400-class `invalid_input` code instead of `internal` — an agent that
+    follows the documented protocol must be able to self-correct, not
+    retry a server bug forever.
+    """
+
+
 class TaskNotFoundError(BoardAgentError):
     pass
 
@@ -117,13 +127,14 @@ class TaskService:
           create an unclaimable, uncompletable deadlock.
         - done / blocked / release-to-todo on a claimed task requires the
           owning agent_id (or an admin key).
+
+        Ownership runs in EVERY auth mode, including unauthenticated local
+        MCP. agent_id is self-declared (cooperative, not a security
+        boundary), but the check must still run — otherwise PATCH status
+        becomes a second, unlocked door next to the locked claim/complete
+        endpoints. Only an admin key bypasses ownership.
         """
         if new_status is None or new_status == existing.get("status"):
-            return
-        # No caller identity (local/unauthenticated mode, e.g. direct service
-        # calls or unauthenticated MCP): allow everything, matching the
-        # unauthenticated-local philosophy of the MCP server.
-        if caller_role is None:
             return
         owner = existing.get("owner_agent_id")
         is_admin = caller_role == ROLE_ADMIN

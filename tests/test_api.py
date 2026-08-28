@@ -107,11 +107,27 @@ class TestService:
         service.claim_task(task["id"], TaskClaim(agent_id="agent_1"))
         got = service.get_task(task["id"])
         assert got["owner_agent_id"] == "agent_1"
-        # releasing back to todo must clear the owner claim
-        service.update_task(task["id"], TaskUpdate(status=Status.TODO))
+        # releasing back to todo must clear the owner claim; the owning
+        # agent (or an admin) is required to release
+        service.update_task(
+            task["id"], TaskUpdate(status=Status.TODO, agent_id="agent_1")
+        )
         got = service.get_task(task["id"])
         assert got["status"] == "todo"
         assert got["owner_agent_id"] is None
+
+    def test_unclaim_requires_owner(self, service):
+        # Ownership is enforced even without a caller_role (direct service
+        # calls / unauthenticated MCP): a non-owner cannot release a claim.
+        task = service.create_task(TaskCreate(title="Locked"))
+        service.claim_task(task["id"], TaskClaim(agent_id="agent_1"))
+        with pytest.raises(NotOwnerError):
+            service.update_task(
+                task["id"], TaskUpdate(status=Status.TODO, agent_id="agent_2")
+            )
+        got = service.get_task(task["id"])
+        assert got["status"] == "in_progress"
+        assert got["owner_agent_id"] == "agent_1"
 
 
 class TestAPI:
