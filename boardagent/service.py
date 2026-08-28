@@ -232,7 +232,7 @@ class TaskService:
                     }
                     return merged
             elif update.metadata is not None and not update.agent_id:
-                raise BoardAgentError("metadata update requires agent_id")
+                raise InvalidInputError("metadata update requires agent_id")
             else:
                 metadata = _UNSET  # explicit null metadata: keep existing
 

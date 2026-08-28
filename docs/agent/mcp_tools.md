@@ -7,7 +7,7 @@ Machine-readable schemas: `mcp_tools.json` (Python-side dump, snake_case keys �
 ## Tools
 
 ### boardagent_create_task
-Create a task. `priority` is a color. `status` defaults `todo`. `metadata` namespaced under `agent_id`.
+Create a task. `priority` is a color. Tasks are always created as `todo` — claim to start work (a `status` argument is ignored). `metadata` namespaced under `agent_id`.
 
 ```json
 {
@@ -16,7 +16,6 @@ Create a task. `priority` is a color. `status` defaults `todo`. `metadata` names
   "due": "ISO8601",
   "priority": "white|blue|green|yellow|orange|red",
   "project": "string",
-  "status": "todo|in_progress|blocked|done",
   "agent_id": "string",
   "metadata": "object",
   "tags": ["string"],
@@ -30,7 +29,7 @@ Create a task. `priority` is a color. `status` defaults `todo`. `metadata` names
 ```
 
 ### boardagent_list_tasks
-Filter + paginate. `limit` max 500.
+Filter + paginate. `limit` is clamped to 1-500 (out-of-range values are clamped, not rejected — REST returns 422 for the same input).
 
 ```json
 {"status": "enum", "project": "string", "owner": "string", "limit": 100, "offset": 0}

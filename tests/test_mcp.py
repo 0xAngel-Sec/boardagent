@@ -406,3 +406,103 @@ async def test_mcp_create_always_todo(tmp_path):
             task = json.loads(result.content[0].text)
             assert task["status"] == "todo"
             assert task["owner_agent_id"] is None
+
+
+@pytest.mark.anyio
+async def test_mcp_narrow_update_does_not_wipe_fields(tmp_path):
+    """A narrow update_task must not clear omitted fields.
+
+    Regression: the handler built TaskUpdate with every field as an
+    explicit kwarg (args.get -> None), so model_fields_set marked all
+    fields "sent" and the service treated each None as "explicitly
+    clear" — a title-only update wiped description, project, tags,
+    estimate, notes, links, and due. Silent data loss on the primary
+    agent write surface.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "boardagent_create_task",
+                arguments={
+                    "title": "rich task",
+                    "description": "keep me",
+                    "project": "p1",
+                    "tags": ["a", "b"],
+                    "estimate": "2h",
+                    "notes": ["n1"],
+                    "links": ["https://x.dev"],
+                    "due": "2026-12-01T10:00:00Z",
+                },
+            )
+            task = json.loads(result.content[0].text)
+            tid = task["id"]
+
+            result = await session.call_tool(
+                "boardagent_update_task", arguments={"id": tid, "title": "renamed"}
+            )
+            assert result.is_error is not True, result.content[0].text
+            updated = json.loads(result.content[0].text)
+            assert updated["title"] == "renamed"
+            assert updated["description"] == "keep me"
+            assert updated["project"] == "p1"
+            assert updated["tags"] == ["a", "b"]
+            assert updated["estimate"] == "2h"
+            assert updated["notes"] == ["n1"]
+            assert updated["links"] == ["https://x.dev"]
+            assert updated["due"] == "2026-12-01T10:00:00Z"
+
+            # explicit null still clears (PATCH semantics preserved)
+            result = await session.call_tool(
+                "boardagent_update_task",
+                arguments={"id": tid, "description": None},
+            )
+            updated = json.loads(result.content[0].text)
+            assert updated["description"] is None
+            assert updated["project"] == "p1"
+
+
+@pytest.mark.anyio
+async def test_mcp_more_invalid_input_paths(tmp_path):
+    """Remaining caller-error paths return invalid_input, not internal.
+
+    Regression: non-string due raised TypeError (missed by the
+    ValueError-only handler) and dict project/owner reached SQLite —
+    both reported as `internal`. Metadata without agent_id mapped to the
+    generic boardagent_error.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+
+            result = await session.call_tool(
+                "boardagent_create_task",
+                arguments={"title": "x", "due": 20240101},
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+            result = await session.call_tool(
+                "boardagent_list_tasks", arguments={"project": {"a": 1}}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+            result = await session.call_tool(
+                "boardagent_list_tasks", arguments={"owner": [1]}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+            result = await session.call_tool(
+                "boardagent_create_task", arguments={"title": "x", "agent_id": "a"}
+            )
+            tid = json.loads(result.content[0].text)["id"]
+            result = await session.call_tool(
+                "boardagent_update_task",
+                arguments={"id": tid, "metadata": {"k": "v"}},
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"

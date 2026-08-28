@@ -69,7 +69,15 @@ def _to_json(obj: Any) -> str:
 def _iso_to_dt(value: str | None) -> datetime | None:
     if not value:
         return None
-    return datetime.fromisoformat(value)
+    if not isinstance(value, str):
+        # Non-string due (dict/int/list) would raise TypeError, which the
+        # ValueError-only handler misses and the catch-all reports as
+        # `internal`. It is a caller error.
+        raise InvalidInputError("argument due must be an ISO 8601 string")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise InvalidInputError(f"argument due is not a valid ISO 8601 datetime: {value!r}") from exc
 
 
 def _require_args(args: dict[str, Any], *names: str) -> None:
@@ -100,6 +108,18 @@ def _require_int(args: dict[str, Any], name: str) -> int:
     return value
 
 
+def _require_str(args: dict[str, Any], name: str) -> str:
+    """Validate a string tool argument before dispatch.
+
+    A non-scalar (dict/list) value would otherwise reach SQLite and raise
+    sqlite3.ProgrammingError, reported as `internal`. Caller error.
+    """
+    value = args.get(name)
+    if not isinstance(value, str):
+        raise InvalidInputError(f"argument {name} must be a string")
+    return value
+
+
 def _normalize_ts(value: str | None) -> str | None:
     """Normalize a stored timestamp to the REST surface's format.
 
@@ -123,7 +143,7 @@ def _tool(name: str, description: str, schema: dict[str, Any]) -> types.Tool:
 TOOLS = [
     _tool(
         "boardagent_create_task",
-        "Create a new task. Priority is a color: red/orange/yellow/green/blue/white. Requires write role.",
+        "Create a new task. Priority is a color: red/orange/yellow/green/blue/white. Tasks are always created as todo (claim to start work). Requires write role.",
         {
             "type": "object",
             "properties": {
@@ -136,11 +156,6 @@ TOOLS = [
                     "default": "white",
                 },
                 "project": {"type": "string"},
-                "status": {
-                    "type": "string",
-                    "enum": [s.value for s in Status],
-                    "default": "todo",
-                },
                 "agent_id": {"type": "string", "description": "Agent namespace for metadata"},
                 "metadata": {"type": "object", "description": "Freeform JSON metadata"},
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "Labels for the task"},
@@ -328,8 +343,8 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     offset = 0
                 tasks = svc.list_tasks(
                     status=status,
-                    project=args.get("project"),
-                    owner=args.get("owner"),
+                    project=_require_str(args, "project") if "project" in args else None,
+                    owner=_require_str(args, "owner") if "owner" in args else None,
                     limit=limit,
                     offset=offset,
                 )
@@ -346,25 +361,25 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
 
             elif name == "boardagent_update_task":
                 _require_args(args, "id")
-                update = TaskUpdate(
-                    title=args.get("title"),
-                    description=args.get("description"),
-                    due=_iso_to_dt(args.get("due")),
-                    priority=Priority(args["priority"]) if "priority" in args else None,
-                    project=args.get("project"),
-                    status=Status(args["status"]) if "status" in args else None,
-                    agent_id=args.get("agent_id"),
-                    metadata=args.get("metadata"),
-                    tags=args.get("tags"),
-                    estimate=args.get("estimate"),
-                    custom_fields=args.get("custom_fields"),
-                    links=args.get("links"),
-                    acceptance_criteria=args.get("acceptance_criteria"),
-                    dependencies=args.get("dependencies"),
-                    notes=args.get("notes"),
-                )
+                task_id = _require_int(args, "id")
+                # Build TaskUpdate from ONLY the fields the caller actually
+                # sent. Passing every field explicitly (args.get -> None)
+                # would mark all fields as "sent" in model_fields_set, and
+                # the service treats each None as "explicitly clear" — a
+                # narrow update like {"id": N, "title": "x"} would wipe
+                # every other field (data loss).
+                allowed = {
+                    "title", "description", "due", "priority", "project",
+                    "status", "agent_id", "metadata", "tags", "estimate",
+                    "links", "acceptance_criteria", "dependencies", "notes",
+                    "custom_fields",
+                }
+                kwargs = {k: v for k, v in args.items() if k in allowed}
+                if "due" in kwargs:
+                    kwargs["due"] = _iso_to_dt(kwargs["due"])
+                update = TaskUpdate(**kwargs)
                 result = svc.update_task(
-                    _require_int(args, "id"),
+                    task_id,
                     update,
                     caller_role=auth_role,
                 )
