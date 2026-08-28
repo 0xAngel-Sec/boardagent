@@ -65,7 +65,6 @@ Create an API key in Settings → API Keys for anything else.
 
 - **For humans**: `docs/human/` — intro, MCP setup, themes, packaging.
 - **For AI agents**: `docs/agent/` — token-optimized REST + MCP references.
-- **Engineering decisions**: `DECISIONS.md`.
 
 ## Development
 
