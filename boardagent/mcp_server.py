@@ -86,6 +86,20 @@ def _require_args(args: dict[str, Any], *names: str) -> None:
         raise InvalidInputError(f"missing required argument(s): {', '.join(missing)}")
 
 
+def _require_int(args: dict[str, Any], name: str) -> int:
+    """Validate an integer tool argument before dispatch.
+
+    A non-scalar (dict/list) value would otherwise reach SQLite and raise
+    sqlite3.ProgrammingError, reported as `internal`; a string would bind
+    as TEXT, match zero rows, and report `not_found`. Both are caller
+    errors — raise InvalidInputError so the agent can self-correct.
+    """
+    value = args.get(name)
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise InvalidInputError(f"argument {name} must be an integer")
+    return value
+
+
 def _normalize_ts(value: str | None) -> str | None:
     """Normalize a stored timestamp to the REST surface's format.
 
@@ -306,11 +320,11 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                 if limit is not None:
                     # Clamp to the same bounds the REST API enforces; a
                     # negative limit would make SQLite return the whole table.
-                    limit = max(1, min(500, int(limit)))
+                    limit = max(1, min(500, _require_int(args, "limit")))
                 offset = args.get("offset", 0)
-                try:
-                    offset = max(0, int(offset))
-                except (TypeError, ValueError):
+                if "offset" in args and args["offset"] is not None:
+                    offset = max(0, _require_int(args, "offset"))
+                else:
                     offset = 0
                 tasks = svc.list_tasks(
                     status=status,
@@ -323,7 +337,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
 
             elif name == "boardagent_get_task":
                 _require_args(args, "id")
-                task = svc.get_task(args["id"])
+                task = svc.get_task(_require_int(args, "id"))
                 if task is None:
                     text = json.dumps({"error": "task not found", "code": "not_found"})
                     is_error = True
@@ -350,7 +364,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
                     notes=args.get("notes"),
                 )
                 result = svc.update_task(
-                    args["id"],
+                    _require_int(args, "id"),
                     update,
                     caller_role=auth_role,
                 )
@@ -362,7 +376,7 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
 
             elif name == "boardagent_delete_task":
                 _require_args(args, "id")
-                deleted = svc.delete_task(args["id"])
+                deleted = svc.delete_task(_require_int(args, "id"))
                 if not deleted:
                     text = json.dumps({"error": "task not found", "code": "not_found"})
                     is_error = True
@@ -371,13 +385,15 @@ def create_mcp_server(service: TaskService | None = None) -> Server:
 
             elif name == "boardagent_claim_task":
                 _require_args(args, "id", "agent_id")
-                result = svc.claim_task(args["id"], TaskClaim(agent_id=args["agent_id"]))
+                result = svc.claim_task(
+                    _require_int(args, "id"), TaskClaim(agent_id=args["agent_id"])
+                )
                 text = _to_json(result)
 
             elif name == "boardagent_complete_task":
                 _require_args(args, "id", "agent_id")
                 result = svc.complete_task(
-                    args["id"], TaskComplete(agent_id=args["agent_id"])
+                    _require_int(args, "id"), TaskComplete(agent_id=args["agent_id"])
                 )
                 text = _to_json(result)
 

@@ -180,7 +180,7 @@ def load_api_keys() -> dict[str, dict[str, str]]:
 
 def save_api_keys(keys: dict[str, dict[str, str]]) -> None:
     _atomic_write(keys_path(), json.dumps(keys, indent=2))
-    _keys_cache["mtime"] = None  # force reload on next read
+    _keys_cache["key"] = None  # force reload on next read
 
 
 def generate_api_key() -> str:

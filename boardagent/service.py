@@ -73,13 +73,20 @@ class TaskService:
         if metadata and agent_id:
             metadata = {agent_id: metadata}
 
+        # Tasks are always created as todo. A caller-supplied status of
+        # in_progress/done would create an ownerless task that claim (409)
+        # and complete (403) both reject — a deadlock only escapable by
+        # PATCHing it back to todo. The claim/complete endpoints are the
+        # only way to enter those states.
+        status = Status.TODO.value
+
         task_id = self.store.create_task(
             title=create.title,
             description=create.description,
             due=_normalize_due(create.due),
             priority=create.priority.value,
             project=create.project,
-            status=create.status.value,
+            status=status,
             metadata=metadata,
             now=self._now(),
             tags=create.tags,
@@ -208,15 +215,22 @@ class TaskService:
             return value if value is not None else {}
 
         metadata = _UNSET
+        metadata_merge: Callable[[dict[str, Any]], Any] | None = None
         if "metadata" in sent:
             if update.metadata is not None and update.agent_id:
                 # Merge under the agent's namespace, preserving all other
-                # agents' namespaces.
-                metadata = dict(existing["metadata"])
-                metadata[update.agent_id] = {
-                    **metadata.get(update.agent_id, {}),
-                    **update.metadata,
-                }
+                # agents' namespaces. The merge runs INSIDE the store's
+                # write transaction against the fresh row (via
+                # metadata_merge) so two agents merging concurrently cannot
+                # both merge against a stale snapshot and silently drop
+                # each other's namespace (lost update).
+                def metadata_merge(existing: dict[str, Any]) -> Any:
+                    merged = dict(existing["metadata"])
+                    merged[update.agent_id] = {
+                        **merged.get(update.agent_id, {}),
+                        **update.metadata,
+                    }
+                    return merged
             elif update.metadata is not None and not update.agent_id:
                 raise BoardAgentError("metadata update requires agent_id")
             else:
@@ -261,6 +275,7 @@ class TaskService:
             dependencies=list_val("dependencies"),
             notes=list_val("notes"),
             transition_check=transition_check,
+            metadata_merge=metadata_merge,
         )
 
     def delete_task(self, task_id: int) -> bool:

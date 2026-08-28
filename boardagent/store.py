@@ -204,6 +204,7 @@ class TaskStore:
         now: str,
         clear_owner: bool = False,
         transition_check: Callable[[dict[str, Any]], None] | None = None,
+        metadata_merge: Callable[[dict[str, Any]], Any] | None = None,
     ) -> dict[str, Any] | None:
         """Update a task inside a single write transaction.
 
@@ -214,6 +215,13 @@ class TaskStore:
         inside this transaction — closing the TOCTOU where a status
         transition validated against a stale snapshot could clobber a
         concurrent claim/complete.
+
+        If metadata_merge is given, it runs against the FRESH row's
+        metadata inside the transaction and its return value is stored.
+        This closes the lost-update window for per-agent metadata
+        namespaces: two agents merging into the same task concurrently
+        both merge against the latest committed row, so neither write
+        silently drops the other's namespace.
         """
         conn = self._connection()
         conn.execute("BEGIN IMMEDIATE")
@@ -228,6 +236,9 @@ class TaskStore:
 
             if transition_check is not None:
                 transition_check(existing)
+
+            if metadata_merge is not None:
+                metadata = metadata_merge(existing)
 
             def pick(field: str, new: Any) -> Any:
                 if field == "owner_agent_id" and clear_owner:

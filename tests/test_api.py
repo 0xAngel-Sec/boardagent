@@ -1,6 +1,7 @@
 """Tests for BoardAgent service and API layers."""
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 
 import pytest
@@ -128,6 +129,50 @@ class TestService:
         got = service.get_task(task["id"])
         assert got["status"] == "in_progress"
         assert got["owner_agent_id"] == "agent_1"
+
+    def test_concurrent_metadata_merge_no_lost_update(self, service):
+        # Two agents merging metadata into the SAME task concurrently must
+        # both land. Regression: the merge ran against a stale pre-read
+        # outside the write transaction, so one agent's namespace silently
+        # vanished (lost update) — the exact cross-agent clobbering the
+        # namespacing was built to prevent.
+        task = service.create_task(TaskCreate(title="race target"))
+        tid = task["id"]
+
+        barrier = threading.Barrier(2)
+        errors: list[str] = []
+
+        def writer(agent: str, key: str, val: str) -> None:
+            barrier.wait()
+            try:
+                service.update_task(
+                    tid, TaskUpdate(agent_id=agent, metadata={key: val})
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{agent}: {exc}")
+
+        threads = [
+            threading.Thread(target=writer, args=("alpha", "note", "from alpha")),
+            threading.Thread(target=writer, args=("beta", "note", "from beta")),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert errors == []
+        got = service.get_task(tid)
+        assert got["metadata"]["alpha"]["note"] == "from alpha"
+        assert got["metadata"]["beta"]["note"] == "from beta"
+
+    def test_create_always_todo(self, service):
+        # A caller-supplied in_progress/done status would create an
+        # ownerless task that claim and complete both reject — a deadlock.
+        task = service.create_task(
+            TaskCreate(title="stuck?", status=Status.IN_PROGRESS)
+        )
+        assert task["status"] == "todo"
+        assert task["owner_agent_id"] is None
 
 
 class TestAPI:

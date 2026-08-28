@@ -345,3 +345,64 @@ async def test_mcp_timestamps_match_rest_format(tmp_path):
             for key in ("created_at", "updated_at"):
                 assert task[key].endswith("Z"), (key, task[key])
                 assert "+00:00" not in task[key]
+
+
+@pytest.mark.anyio
+async def test_mcp_non_scalar_id_limit_invalid_input(tmp_path):
+    """Non-scalar id/limit return invalid_input, not internal.
+
+    Regression: a dict/list id reached SQLite and raised
+    sqlite3.ProgrammingError (reported as `internal`); a dict limit raised
+    TypeError in int(limit). Both are caller errors and must be
+    self-correctable.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+
+            result = await session.call_tool(
+                "boardagent_get_task", arguments={"id": {"a": 1}}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+            result = await session.call_tool(
+                "boardagent_list_tasks", arguments={"limit": {"n": 5}}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+            result = await session.call_tool(
+                "boardagent_claim_task", arguments={"id": [1], "agent_id": "x"}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+            # string id is a caller error too, not "task not found"
+            result = await session.call_tool(
+                "boardagent_get_task", arguments={"id": "abc"}
+            )
+            assert result.is_error is True
+            assert json.loads(result.content[0].text)["code"] == "invalid_input"
+
+
+@pytest.mark.anyio
+async def test_mcp_create_always_todo(tmp_path):
+    """create_task cannot create an ownerless in_progress/done task.
+
+    Regression: a caller-supplied status of in_progress/done created a
+    task that claim (409) and complete (403) both reject — a deadlock
+    only escapable by PATCHing back to todo.
+    """
+    server_params = _server_params(tmp_path)
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        async with ClientSession(read_stream, write_stream) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                "boardagent_create_task",
+                arguments={"title": "stuck?", "status": "in_progress"},
+            )
+            task = json.loads(result.content[0].text)
+            assert task["status"] == "todo"
+            assert task["owner_agent_id"] is None
