@@ -4,7 +4,7 @@ This document records the open-question defaults chosen during the initial build
 
 ## Architecture
 
-- **Single background process owns the DB.** The service layer, REST API, and MCP server all run inside one uvicorn process (`boardagent-server`). The Textual UI is a separate foreground process that calls `http://127.0.0.1:7373`.
+- **Single background process owns the DB.** The service layer and REST API run inside one uvicorn process (`boardagent-server`). The MCP server is a separate stdio process (`boardagent-mcp`) launched by the MCP host — it imports the same service layer but does not run inside uvicorn. The Textual UI is a separate foreground process that calls `http://127.0.0.1:7373`.
 - **MCP wraps the service layer, not HTTP.** Both REST and MCP import from `boardagent.service` and `boardagent.store`. No task logic is duplicated. MCP is implemented with the official `mcp` Python SDK (stdio transport), making it easy to plug into any MCP host.
 - **SQLite, single file, WAL enabled.** Storage is at `~/.boardagent/boardagent.db` by default. WAL is set with `PRAGMA journal_mode=WAL` for safer concurrent reads while the service runs.
 
@@ -14,7 +14,7 @@ This document records the open-question defaults chosen during the initial build
 - **Priority as color enum:** `red`, `orange`, `yellow`, `green`, `blue`, `white`. Stored as a string.
 - **Status lifecycle:** `todo`, `in_progress`, `blocked`, `done`. Status is a string enum. Tasks are always created as `todo` — a caller-supplied `in_progress`/`done` on create would produce an ownerless task that claim and complete both reject (deadlock). Claim/complete are the only way into those states.
 - **Task claiming is a lock.** `POST /tasks/{id}/claim` with an `agent_id` atomically checks `owner_agent_id` is null and `status` is `todo`, then sets both `owner_agent_id` and `status=in_progress`. A second claim returns HTTP 409. `POST /tasks/{id}/complete` requires the same `agent_id` and transitions `status` to `done`. Release/unclaim is supported via `PATCH` (set `status=todo` and clear `owner_agent_id`).
-- **Metadata stays freeform.** No schema validation beyond valid JSON. The `agent_id` namespace is passed as a query/header parameter.
+- **Metadata stays freeform.** No schema validation beyond valid JSON. The `agent_id` namespace is passed as a body field on create/update/claim/complete.
 - **Ownership is cooperative, not a security boundary.** `agent_id` is self-declared by the caller and is never bound to the API key. Any write-role key can claim any task, and the PATCH ownership check trusts the caller-supplied `agent_id`. This is a deliberate design for a local, trusted, cooperative multi-agent board — it prevents accidental cross-agent clobbering, not malicious impersonation. If real per-agent isolation is ever needed, bind `agent_id` to the API key at key-creation time and verify it server-side.
 - **Ownership checks run in every auth mode.** The PATCH status-transition guard (service.py `_check_status_transition`) does not skip when `caller_role` is None (unauthenticated local MCP). Skipping there would leave a second, unlocked door next to the locked claim/complete endpoints: a non-owner could PATCH a claimed task to done while the complete endpoint correctly blocked them. Only an admin key bypasses ownership. (v0.2.1 fix — the guard previously returned early in unauthenticated mode.)
 
@@ -25,7 +25,7 @@ This document records the open-question defaults chosen during the initial build
 ## Terminal UI
 
 - **Textual, foreground, separate process.** Entry point `boardagent`. Two display modes: Human (default) and AI (toggle with `a`). Settings tab controls opacity and theme switching.
-- **Theme format: JSON.** Themes live in `~/.boardagent/themes/*.json` and in the built-in package `boardagent/themes/`. Schema is documented in `docs/human/themes.md`. Each theme defines a named palette map (name → Textual CSS variables + metadata colors). Default themes: `amber.json` and `matrix.json`.
+- **Theme format: JSON.** Themes live in `~/.boardagent/themes/*.json` and in the built-in package `boardagent/themes/`. Schema is documented in `docs/human/themes.md`. Each theme defines a named palette map (name → Textual CSS variables + metadata colors). Built-in themes are Python dicts in `boardagent/themes.py` (27 built-ins: 21 dark, 6 light), written to `~/.boardagent/themes/` at runtime. Default themes: `amber.json` and `matrix.json`.
 - **Opacity via Windows layered window (when on Windows).** Textual apps run in a terminal; true per-pixel window transparency requires platform-specific APIs. We provide a documented Windows helper script that sets the console window opacity via the Win32 `SetLayeredWindowAttributes` API. The setting is persisted; applying it requires restarting the TUI after running the helper.
 
 ## Docs
@@ -37,7 +37,7 @@ This document records the open-question defaults chosen during the initial build
 
 - **pyproject.toml with console scripts:** `boardagent-server`, `boardagent`, `boardagent-mcp`.
 - **MIT license.** `LICENSE` included.
-- **PyInstaller exes are documented but not pre-built.** Build with `python scripts/build_exes.py`; install with `INSTALL.bat` (see `docs/human/packaging.md`).
+- **PyInstaller exes are built and released.** Build with `python scripts/build_exes.py`; install with `INSTALL.bat` (see `docs/human/packaging.md`). Release zips land in `dist/` via `scripts/make_release.py`.
 
 ## Testing
 

@@ -31,7 +31,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
 
 | Method | Path | Role | Success | Errors |
 |---|---|---|---|---|
-| GET | `/healthz` | none | 200 `{"status":"ok","version":"0.1.0"}` | — |
+| GET | `/healthz` | none | 200 `{"status":"ok","version":"0.2.1"}` | — |
 | POST | `/tasks` | write | 201 Task | 422 validation |
 | GET | `/tasks?status=&project=&owner=&limit=&offset=` | read | 200 `{tasks, count}` | 422 |
 | GET | `/tasks/{id}` | read | 200 Task | 404 |
@@ -45,7 +45,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
 | PUT | `/settings` | admin | 200 | — |
 | GET | `/keys` | admin | 200 list | — |
 | POST | `/keys` | admin | 201 `{key,name,role}` | — |
-| DELETE | `/keys/{key}` | admin | 204 | 404 |
+| DELETE | `/keys/{key}` | admin | 204 | 400, 404 |
 
 `count` = rows in THIS page (after limit/offset), not the total. Paginate until a page returns fewer than `limit` rows. `owner` filters on `owner_agent_id` (the agent that claimed the task).
 
@@ -56,6 +56,7 @@ Base: `http://127.0.0.1:7373` (local). Auth: `X-API-Key` header. Roles: `read` <
 - `[]` / `{}` → clears list/dict fields (tags, links, dependencies, notes, custom_fields). `null` on a list/dict field also clears it (never stored as JSON null).
 - `metadata: null` is IGNORED (kept). `metadata` requires `agent_id`; merges into `metadata.<agent_id>`.
 - Unknown fields → 422 (extra=forbid). Typos fail loudly.
+- `POST /tasks` always creates with `status=todo` — a supplied `status` is silently ignored. Claim/complete are the only way into `in_progress`/`done`.
 
 ## Status transitions (ownership enforced)
 

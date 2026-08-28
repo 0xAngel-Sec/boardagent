@@ -4,7 +4,7 @@ info:
   description: 'BoardAgent local task manager API. All endpoints except /healthz require
     the X-API-Key header (roles: read < write < admin). See docs/agent/rest_api.md
     for the full error table.'
-  version: 0.1.0
+  version: 0.2.1
 paths:
   /healthz:
     get:

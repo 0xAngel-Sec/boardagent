@@ -2,7 +2,7 @@
   {
     "name": "boardagent_create_task",
     "title": null,
-    "description": "Create a new task. Priority is a color: red/orange/yellow/green/blue/white. Requires write role.",
+    "description": "Create a new task. Priority is a color: red/orange/yellow/green/blue/white. Tasks are always created as todo (claim to start work). Requires write role.",
     "input_schema": {
       "type": "object",
       "properties": {
@@ -31,16 +31,6 @@
         },
         "project": {
           "type": "string"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "todo",
-            "in_progress",
-            "blocked",
-            "done"
-          ],
-          "default": "todo"
         },
         "agent_id": {
           "type": "string",

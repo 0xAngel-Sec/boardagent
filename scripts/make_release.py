@@ -27,7 +27,7 @@ DIST = ROOT / "dist"
 
 
 def main() -> None:
-    version = "0.1.0"
+    version = "0.2.1"
     if "--version" in sys.argv:
         version = sys.argv[sys.argv.index("--version") + 1]
 
